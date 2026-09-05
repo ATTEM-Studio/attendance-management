@@ -5,24 +5,26 @@ import { readFile } from 'node:fs/promises';
 
 const forbiddenBranding = ['꿈카페', '하단지점', '하단점'];
 
-test('built app is free of store-specific branding', async () => {
+test('built app and repository docs are free of store-specific branding', async () => {
   execFileSync(process.execPath, ['build.mjs'], { stdio: 'pipe' });
 
-  const [indexHtml, manifest, coreJs, adminJs] = await Promise.all([
+  const [indexHtml, manifest, coreJs, adminJs, readme] = await Promise.all([
     readFile(new URL('../dist/index.html', import.meta.url), 'utf8'),
     readFile(new URL('../dist/manifest.webmanifest', import.meta.url), 'utf8'),
     readFile(new URL('../dist/core.js', import.meta.url), 'utf8'),
     readFile(new URL('../dist/admin-redesign.js', import.meta.url), 'utf8'),
+    readFile(new URL('../README.md', import.meta.url), 'utf8'),
   ]);
 
-  const builtFiles = {
+  const checkedFiles = {
     'index.html': indexHtml,
     'manifest.webmanifest': manifest,
     'core.js': coreJs,
     'admin-redesign.js': adminJs,
+    'README.md': readme,
   };
 
-  for (const [name, content] of Object.entries(builtFiles)) {
+  for (const [name, content] of Object.entries(checkedFiles)) {
     for (const term of forbiddenBranding) {
       assert.equal(content.includes(term), false, `${name} still contains ${term}`);
     }
@@ -33,6 +35,7 @@ test('built app is free of store-specific branding', async () => {
   assert.match(coreJs, /function displayStoreName/);
   assert.match(coreJs, /근태관리/);
   assert.match(adminJs, /displayStoreName\(\)/);
+  assert.match(readme, /범용 근태관리 PWA/);
 
   const parsedManifest = JSON.parse(manifest);
   assert.equal(parsedManifest.name, '근태관리');
