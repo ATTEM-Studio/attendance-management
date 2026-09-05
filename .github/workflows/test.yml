@@ -1,4 +1,4 @@
-name: v28 checks
+name: generic branding checks
 
 on:
   push:
