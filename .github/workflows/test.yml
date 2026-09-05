@@ -1,4 +1,4 @@
-name: v28 checks
+name: v29 checks
 
 on:
   push:
@@ -17,4 +17,13 @@ jobs:
       - name: Check JavaScript syntax
         run: node --check admin-redesign.js && node --check build.mjs
       - name: Run regression tests
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-output.txt
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test-output.txt
