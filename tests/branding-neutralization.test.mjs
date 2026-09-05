@@ -30,7 +30,9 @@ test('built app is free of store-specific branding', async () => {
 
   assert.match(indexHtml, /직원 근무 일정과 출퇴근을 관리하는 근태관리 시스템/);
   assert.match(indexHtml, /<title>근태관리<\/title>/);
+  assert.match(coreJs, /function displayStoreName/);
   assert.match(coreJs, /근태관리/);
+  assert.match(adminJs, /displayStoreName\(\)/);
 
   const parsedManifest = JSON.parse(manifest);
   assert.equal(parsedManifest.name, '근태관리');
