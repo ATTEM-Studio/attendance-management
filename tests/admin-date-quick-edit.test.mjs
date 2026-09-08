@@ -28,7 +28,10 @@ test('selected date inspector exposes attendance state and quick schedule editin
     api: {},
     request: () => {},
     state: {
-      employees: [{ id:'e1', name:'김송이', position:'스태프', active:true }],
+      employees: [
+        { id:'e1', name:'김송이', position:'스태프', active:true },
+        { id:'e2', name:'김채빈', position:'스태프', active:true },
+      ],
       schedules: [{ id:'s1', employeeId:'e1', workDate:'2026-09-06', scheduledStart:'09:00', scheduledEnd:'17:00', shiftType:'other' }],
       attendance: [],
     },
@@ -72,4 +75,5 @@ test('selected date inspector exposes attendance state and quick schedule editin
   assert.match(scheduleEditor, /김송이/);
   assert.match(scheduleEditor, /data-date-schedule-save="e1"/);
   assert.match(scheduleEditor, /직원 추가/);
+  assert.match(scheduleEditor, /김채빈/);
 });
