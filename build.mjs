@@ -82,8 +82,14 @@ index = index
 if (!index.includes('/styles-admin-redesign.css')) {
   index = index.replace('</head>', '<link rel="stylesheet" href="/styles-admin-redesign.css"></head>');
 }
+if (!index.includes('/styles-admin-date-tools.css')) {
+  index = index.replace('</head>', '<link rel="stylesheet" href="/styles-admin-date-tools.css"></head>');
+}
 if (!index.includes('/admin-redesign.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-redesign.js"></script><script src="/boot.js"></script>');
+}
+if (!index.includes('/admin-date-tools.js')) {
+  index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-date-tools.js"></script><script src="/boot.js"></script>');
 }
 await writeOut('index.html', index);
 
@@ -103,12 +109,16 @@ let adminRedesign = neutralizeLegacyBranding(await readFile(new URL('./admin-red
 adminRedesign = neutralizeRuntimeStoreNameReferences(adminRedesign);
 await writeOut('admin-redesign.js', adminRedesign);
 await writeOut('styles-admin-redesign.css', await readFile(new URL('./styles-admin-redesign.css', import.meta.url), 'utf8'));
+await writeOut('admin-date-tools.js', await readFile(new URL('./admin-date-tools.js', import.meta.url), 'utf8'));
+await writeOut('styles-admin-date-tools.css', await readFile(new URL('./styles-admin-date-tools.css', import.meta.url), 'utf8'));
 
 const shell = [
   '/',
   ...BASE_FILES.map((file) => `/${file}`),
   '/styles-admin-redesign.css',
   '/admin-redesign.js',
+  '/styles-admin-date-tools.css',
+  '/admin-date-tools.js',
 ];
 const sw = `const CACHE='attendance-management-v28-generic';const SHELL=${JSON.stringify(shell)};self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request)))})\n`;
 await writeOut('sw.js', sw);
