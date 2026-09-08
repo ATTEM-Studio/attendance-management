@@ -34,9 +34,6 @@ test('selected date inspector exposes attendance state and quick schedule editin
     },
     adminWorkSelectedDate: '2026-09-06',
     session: { token:'test-token' },
-    employeeById(id) { return this.state.employees.find((e) => e.id === id); },
-    activeEmployees() { return this.state.employees.filter((e) => e.active); },
-    attendanceSessionsFor(id,date) { return this.state.attendance.filter((a) => a.employeeId === id && a.workDate === date); },
     bindAdminWork() {},
     esc: (v) => String(v ?? ''),
     shiftTypeLabel: () => '기타',
@@ -53,6 +50,9 @@ test('selected date inspector exposes attendance state and quick schedule editin
     load: async () => {}, renderAdmin() {}, month:'2026-09', adminWorkMonth:'2026-09',
     openDeleteScheduleSheet() {},
   };
+  context.employeeById = (id) => context.state.employees.find((e) => e.id === id);
+  context.activeEmployees = () => context.state.employees.filter((e) => e.active);
+  context.attendanceSessionsFor = (id,date) => context.state.attendance.filter((a) => a.employeeId === id && a.workDate === date);
   context.globalThis = context;
   vm.createContext(context);
   vm.runInContext(source, context);
