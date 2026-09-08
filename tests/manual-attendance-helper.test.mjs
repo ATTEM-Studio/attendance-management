@@ -4,8 +4,8 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-const helperUrl = new URL('../supabase/functions/attendance-api/manual-attendance.mjs', import.meta.url);
-const edgeUrl = new URL('../supabase/functions/attendance-api/index.ts', import.meta.url);
+const helperUrl = new URL('../supabase/functions/attendance-manual-create/manual-attendance.mjs', import.meta.url);
+const edgeUrl = new URL('../supabase/functions/attendance-manual-create/index.ts', import.meta.url);
 
 test('manual attendance helper validates historical record input', async () => {
   assert.equal(existsSync(helperUrl), true, 'manual-attendance.mjs must exist');
@@ -43,12 +43,14 @@ test('manual attendance metrics use the assigned schedule', async () => {
   assert.deepEqual(metrics, { workMinutes:475, lateMinutes:7, earlyLeaveMinutes:0, overtimeMinutes:2 });
 });
 
-test('edge function exposes admin-only historical attendance creation with audit trail', async () => {
-  assert.equal(existsSync(edgeUrl), true, 'attendance-api source must be tracked');
+test('isolated edge function exposes admin-only historical attendance creation with audit trail', async () => {
+  assert.equal(existsSync(edgeUrl), true, 'attendance-manual-create source must be tracked');
   const source = await readFile(edgeUrl, 'utf8');
-  assert.match(source, /attendance\/manual-create/);
+  assert.match(source, /app_sessions/);
+  assert.match(source, /role !== 'admin'/);
   assert.match(source, /computeManualAttendanceMetrics/);
   assert.match(source, /audit_logs/);
-  assert.match(source, /admin_created/);
+  assert.match(source, /admin_clock_in/);
+  assert.match(source, /admin_clock_out/);
   assert.match(source, /이미 근태 기록이 있는 날짜/);
 });
