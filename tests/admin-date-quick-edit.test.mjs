@@ -37,6 +37,7 @@ test('selected date inspector exposes attendance state and quick schedule editin
     employeeById(id) { return this.state.employees.find((e) => e.id === id); },
     activeEmployees() { return this.state.employees.filter((e) => e.active); },
     attendanceSessionsFor(id,date) { return this.state.attendance.filter((a) => a.employeeId === id && a.workDate === date); },
+    bindAdminWork() {},
     esc: (v) => String(v ?? ''),
     shiftTypeLabel: () => '기타',
     longDate: () => '9월 6일 (일)',
