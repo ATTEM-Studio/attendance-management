@@ -165,3 +165,20 @@ async function initAdminNotifications() {
   replaceAdminNotificationCard();
   await refreshAdminServerAlerts();
 }
+
+if (typeof adminTodayView === 'function') {
+  const baseAdminTodayView = adminTodayView;
+  adminTodayView = function adminTodayViewWithNotifications() {
+    const markup = baseAdminTodayView();
+    return markup.replace('<aside class="admin-side-column">', `<aside class="admin-side-column">${adminNotificationCardMarkup()}`);
+  };
+}
+
+if (typeof renderAdmin === 'function') {
+  const baseRenderAdmin = renderAdmin;
+  renderAdmin = function renderAdminWithNotifications() {
+    baseRenderAdmin();
+    bindAdminNotificationCard();
+    void initAdminNotifications();
+  };
+}
