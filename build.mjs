@@ -113,6 +113,7 @@ await writeOut('core.js', core);
 
 let adminRedesign = neutralizeLegacyBranding(await readFile(new URL('./admin-redesign.js', import.meta.url), 'utf8'));
 adminRedesign = neutralizeRuntimeStoreNameReferences(adminRedesign);
+adminRedesign = adminRedesign.replaceAll("'체크리스트 없음'", "''");
 await writeOut('admin-redesign.js', adminRedesign);
 await writeOut('styles-admin-redesign.css', await readFile(new URL('./styles-admin-redesign.css', import.meta.url), 'utf8'));
 await writeOut('admin-date-tools.js', await readFile(new URL('./admin-date-tools.js', import.meta.url), 'utf8'));
