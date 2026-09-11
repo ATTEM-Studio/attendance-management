@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
 
 const migration = await readFile(new URL('../supabase/migrations/20260911_admin_notifications.sql', import.meta.url), 'utf8').catch(() => '');
 const edge = await readFile(new URL('../supabase/functions/attendance-notify/index.ts', import.meta.url), 'utf8').catch(() => '');
@@ -35,4 +36,27 @@ test('admin notification client supports one-tap Push subscription', () => {
   assert.ok(build.includes('/styles-admin-notifications.css'));
   assert.ok(build.includes('/admin-notifications.js'));
   assert.ok(workflow.includes('node --check admin-notifications.js'));
+});
+
+test('server alerts replace duplicate local push-backed attention while late warnings remain', () => {
+  const context = { console };
+  vm.runInNewContext(`${client}\n;globalThis.__merge = mergeAdminAttention;`, context);
+  const merged = context.__merge(
+    [
+      { employeeId:'e1', type:'missing_clock_in', workDate:'2026-09-11', title:'local' },
+      { employeeId:'e1', type:'late', workDate:'2026-09-11', title:'late local' },
+    ],
+    [{ id:'a1', employeeId:'e1', type:'missing_clock_in', workDate:'2026-09-11', severity:'danger', title:'server', body:'server body' }],
+  );
+  assert.equal(merged.filter((row) => row.type === 'missing_clock_in').length, 1);
+  assert.equal(merged.find((row) => row.type === 'missing_clock_in').title, 'server');
+  assert.equal(merged.some((row) => row.title === 'late local'), true);
+});
+
+test('service worker and client preserve admin alert deep links', () => {
+  assert.ok(build.includes("self.addEventListener('push'"));
+  assert.ok(build.includes("self.addEventListener('notificationclick'"));
+  for (const marker of ['attendance-admin-alert-destination', 'sessionStorage', 'handleAdminNotificationDeepLink', 'openSelectedDateAttendance']) {
+    assert.ok(client.includes(marker), `missing ${marker}`);
+  }
 });
