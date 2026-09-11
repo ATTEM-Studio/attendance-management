@@ -13,10 +13,10 @@
 - 관리자 기기별 Web Push 구독
 - 알림 허용한 모든 관리자 기기로 Push 전송
 - 5분 주기 이상 감지
-- 앱 내 `확인 필요` 영역을 실시간성 있는 알림센터로 확장
+- 앱 내 `확인 필요` 영역을 서버 알림과 결합
 - 동일 이상 건 중복 Push 방지
 - 알림 클릭 시 관리자 화면의 관련 직원/날짜로 이동
-- 이상이 해결되면 앱 내 알림 상태를 해결됨으로 전환
+- 이상이 해결되면 활성 알림에서 제거
 - 관리자 화면에서 해당 기기의 Push 알림 켜기/끄기
 
 ### v1에서 제외
@@ -26,6 +26,7 @@
 - 직원에게 보내는 Push
 - 반복 재촉 알림
 - 시간대별 무음 스케줄
+- 읽음/안읽음 상태 관리
 
 임계값은 v1에서 기본값으로 고정하고, 사용성 확인 후 설정 UI를 추가한다.
 
@@ -42,8 +43,6 @@
 
 각 이상 건은 안정적인 `alert_key`를 가진다.
 
-예시:
-
 - `missing_clock_in:{employee_id}:{work_date}`
 - `missing_clock_out:{attendance_id}`
 - `stale_open:{attendance_id}`
@@ -57,19 +56,21 @@
 
 ### 최초 관리자 진입
 
-관리자 로그인 후 Push 구독이 없는 기기에는 작고 명확한 안내 카드를 노출한다.
+관리자 로그인 후 Push 구독이 없는 기기에는 작은 안내 카드를 노출한다.
 
 > 출근·퇴근 누락 알림을 받아보세요  
 > 앱을 열어두지 않아도 확인이 필요한 근태를 알려드립니다.  
 > **[알림 켜기]**
 
-`알림 켜기`를 누른 사용자 동작 안에서 `Notification.requestPermission()`을 호출한다. 권한이 허용되면 서비스워커의 Push 구독을 생성하고 서버에 등록한다.
+`알림 켜기`를 누른 사용자 동작 안에서 `Notification.requestPermission()`을 호출한다. 권한이 허용되면 서비스워커 Push 구독을 생성하고 서버에 등록한다.
 
-권한 거부 시 반복 팝업을 띄우지 않는다. 대신 관리자 화면에 `브라우저 설정에서 알림 권한을 허용해 주세요` 수준의 안내만 제공한다.
+권한 거부 시 반복 팝업을 띄우지 않는다. 관리자 화면에 `브라우저 설정에서 알림 권한을 허용해 주세요` 안내만 제공한다.
 
 ### 관리자 화면
 
-기존 `오늘 > 확인 필요`를 유지하되 서버에서 관리되는 알림 상태를 함께 반영한다.
+기존 `오늘 > 확인 필요`는 유지하되 서버 `open` 알림과 병합한다.
+
+Push 대상 4개 유형은 서버 알림을 우선한다. 같은 직원·날짜·유형의 기존 클라이언트 계산 항목이 있으면 한 번만 표시한다. 지각처럼 Push 대상이 아닌 기존 로컬 경고는 그대로 유지한다.
 
 예시:
 
@@ -89,11 +90,11 @@ Push payload에는 최소한 다음 정보만 포함한다.
 - `alertId`
 - 표시용 `title`, `body`
 
-서비스워커의 `notificationclick` 이벤트가 앱을 열거나 기존 창을 포커스하고 다음과 같은 URL fragment/query를 전달한다.
+서비스워커의 `notificationclick` 이벤트가 앱을 열거나 기존 창을 포커스하고 다음 형태의 목적지를 전달한다.
 
 `/?adminAlert={alertId}&employee={employeeId}&date={workDate}`
 
-앱 부팅 후 관리자 세션이 유효하면 관련 관리자 화면으로 이동한다. 로그인이 만료된 경우 먼저 관리자 로그인을 거친 뒤 원래 목적지로 이어진다.
+관리자 세션이 유효하면 바로 관련 화면으로 이동한다. 세션이 만료된 경우 목적지 정보를 `sessionStorage` 등 임시 저장소에 보관하고 관리자 로그인 완료 후 한 번만 복원한다.
 
 ## 5. 아키텍처
 
@@ -108,7 +109,7 @@ Push payload에는 최소한 다음 정보만 포함한다.
               ↓
  notification_alerts upsert
       ↙                 ↘
-앱 내 알림센터       Web Push 발송
+앱 내 확인 필요       Web Push 발송
                          ↓
                관리자 허용 기기 전체
 ```
@@ -122,8 +123,8 @@ Push payload에는 최소한 다음 정보만 포함한다.
 - 서비스워커 Push 구독 생성/해제
 - 구독 정보를 서버 API에 등록/삭제
 - 활성 알림 조회
+- 기존 `확인 필요`와 서버 알림 중복 제거 후 병합
 - Push URL 딥링크 처리
-- 관리자 `확인 필요` UI와 연결
 
 기존 관리자 재설계 코드와 근태 판단 로직을 대규모 수정하지 않고 별도 파일로 추가한다.
 
@@ -133,7 +134,7 @@ Push payload에는 최소한 다음 정보만 포함한다.
 
 - `push`
 - `notificationclick`
-- 필요 시 `pushsubscriptionchange`
+- `pushsubscriptionchange`는 브라우저 지원 범위를 확인해 필요 시 추가
 
 기존 캐시/fetch 동작은 유지한다.
 
@@ -146,13 +147,12 @@ Push payload에는 최소한 다음 정보만 포함한다.
 - `POST /subscribe`
 - `POST /unsubscribe`
 - `GET /alerts`
-- `POST /read`
 
 Cron 전용:
 
 - `POST /scan`
 
-관리자 API는 기존 `app_sessions`의 custom bearer token을 검증하고 `role = admin`만 허용한다.
+관리자 API는 기존 `app_sessions` custom bearer token을 검증하고 `role = admin`만 허용한다.
 
 `/scan`은 브라우저에서 사용할 수 없도록 별도 서버 비밀값(`x-cron-secret`) 검증을 추가한다.
 
@@ -177,7 +177,7 @@ Cron 전용:
 - `created_at timestamptz`
 - `updated_at timestamptz`
 
-Push endpoint와 암호화 키는 관리자 전용 서버 경로에서만 접근한다. 프론트 bootstrap 데이터에 포함하지 않는다.
+Push endpoint와 암호화 키는 관리자 전용 Edge Function에서만 접근한다. 일반 bootstrap 데이터에는 포함하지 않는다. 클라이언트의 직접 DB 접근도 허용하지 않는다.
 
 #### `notification_alerts`
 
@@ -200,13 +200,15 @@ Push endpoint와 암호화 키는 관리자 전용 서버 경로에서만 접근
 - `push_sent_at timestamptz null`
 - `resolved_at timestamptz null`
 
-필요하면 `read_at`을 추가하여 앱 내 읽음 상태를 별도로 표현할 수 있다. v1에서는 읽음보다 `open/resolved` 상태를 우선한다.
+v1에서는 읽음 상태를 별도로 저장하지 않는다.
 
 ## 6. Push 발송
 
 Web Push는 표준 Push API + VAPID를 사용한다.
 
 서버에는 VAPID private key를 Supabase Edge Function secret으로만 저장한다. 공개키만 프론트가 구독 생성 시 사용한다.
+
+한 alert를 처음 생성했을 때 현재 활성 관리자 구독 전체에 한 번 fan-out 한다. `push_sent_at`은 fan-out 시도를 마친 뒤 기록한다. v1에서는 일시적 Push 실패를 반복 재시도해 다른 정상 기기에 중복 알림을 만드는 것보다 중복 방지를 우선한다.
 
 Push 전송 실패 처리:
 
@@ -219,7 +221,7 @@ Push 전송 실패 처리:
 
 Supabase의 `pg_cron` + `pg_net`을 사용하여 5분마다 `attendance-notify /scan`을 호출한다.
 
-Cron은 프론트 세션에 의존하지 않는다. 스캔 호출은 별도 비밀값으로 보호한다.
+Cron은 프론트 세션에 의존하지 않는다. 스캔 호출은 별도 비밀값으로 보호하며 이 값은 프론트에 노출하지 않는다.
 
 첫 구현 시 운영 DB에 Cron을 즉시 걸기 전에 Edge Function의 `dryRun` 모드를 통해 현재 데이터에서 어떤 알림이 생성되는지 확인한다.
 
@@ -276,6 +278,7 @@ Push는 해결 알림까지 보내지 않는다. 앱 내에서는 해결된 항�
 
 - 관리자 구독 등록/조회는 기존 관리자 세션 인증 필수
 - Push subscription endpoint/p256dh/auth는 일반 bootstrap에 포함하지 않음
+- 관련 테이블은 프론트 직접 접근을 허용하지 않고 Edge Function 경유
 - VAPID private key는 Edge Function secret에만 보관
 - Cron 호출은 별도 secret으로 검증
 - `/scan`은 요청자가 임의 employee/date를 주입해 Push를 만드는 구조가 아니라 서버가 DB 상태를 직접 계산
@@ -324,9 +327,11 @@ Web Push를 안정적으로 사용하려면 홈 화면에 추가한 PWA에서 �
 - 전날 미퇴근이 있어도 오늘 근태에는 영향 없음
 - 관리자 수정 후 stale alert resolved
 - 필수 체크리스트 전부 완료 시 resolved
+- 기존 로컬 `확인 필요`와 서버 alert가 같은 건이면 한 번만 표시
 - Push 410 응답 시 구독 비활성화
 - 비관리자 세션 subscribe 차단
 - 잘못된 cron secret으로 scan 차단
+- Push 딥링크 상태에서 로그인 만료 후 로그인하면 원래 직원/날짜로 복귀
 
 ### 통합 검증
 
@@ -362,6 +367,7 @@ Cron 활성화 전 운영 데이터를 대상으로 `dryRun`을 실행해 현재
 - 관리자가 신규 기기에서 1회의 `알림 켜기` 동작으로 Push 설정 완료
 - 출근 미처리/퇴근 미처리/전날 미퇴근/필수 체크리스트 미완료가 5~10분 이내 관리자에게 전달
 - 동일 이상 건 Push는 1회만 전송
+- 기존 확인 필요 UI와 중복 표시되지 않음
 - 알림 클릭 시 해당 직원/날짜 확인으로 바로 이동
 - 문제 해결 후 앱 내 활성 알림에서 사라짐
 - Push 기능 장애가 기존 출퇴근 처리에 영향을 주지 않음
