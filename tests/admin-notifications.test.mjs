@@ -20,6 +20,16 @@ test('notification schema is server-only and has stable alert keys', () => {
   assert.match(migration, /create extension if not exists pg_net/i);
 });
 
+test('notification secrets are available only through a service-role vault bridge', () => {
+  assert.match(migration, /get_attendance_notification_secret/i);
+  assert.match(migration, /vault\.decrypted_secrets/i);
+  assert.match(migration, /revoke all on function public\.get_attendance_notification_secret/i);
+  assert.match(migration, /grant execute on function public\.get_attendance_notification_secret\(text\) to service_role/i);
+  assert.ok(edge.includes('get_attendance_notification_secret'));
+  assert.ok(edge.includes('attendance_notify_vapid_private_key'));
+  assert.ok(edge.includes('attendance_notify_cron_secret'));
+});
+
 test('attendance-notify edge function exposes protected admin and cron routes', () => {
   for (const marker of ['/subscribe','/unsubscribe','/alerts','/config','/scan','x-cron-secret','requireAdmin','web-push','buildActiveAlerts']) {
     assert.ok(edge.includes(marker), `missing ${marker}`);
