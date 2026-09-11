@@ -39,6 +39,7 @@ test('built app and repository docs are free of store-specific branding', async 
   assert.match(coreJs, /function displayStoreName/);
   assert.match(coreJs, /근태관리/);
   assert.match(adminJs, /displayStoreName\(\)/);
+  assert.equal(adminJs.includes('체크리스트 없음'), false, 'empty checklist label must not appear on built staff cards');
   assert.match(readme, /범용 근태관리 PWA/);
 
   const parsedManifest = JSON.parse(manifest);
