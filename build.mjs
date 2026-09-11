@@ -85,11 +85,17 @@ if (!index.includes('/styles-admin-redesign.css')) {
 if (!index.includes('/styles-admin-date-tools.css')) {
   index = index.replace('</head>', '<link rel="stylesheet" href="/styles-admin-date-tools.css"></head>');
 }
+if (!index.includes('/styles-admin-notifications.css')) {
+  index = index.replace('</head>', '<link rel="stylesheet" href="/styles-admin-notifications.css"></head>');
+}
 if (!index.includes('/admin-redesign.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-redesign.js"></script><script src="/boot.js"></script>');
 }
 if (!index.includes('/admin-date-tools.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-date-tools.js"></script><script src="/boot.js"></script>');
+}
+if (!index.includes('/admin-notifications.js')) {
+  index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-notifications.js"></script><script src="/boot.js"></script>');
 }
 await writeOut('index.html', index);
 
@@ -111,6 +117,8 @@ await writeOut('admin-redesign.js', adminRedesign);
 await writeOut('styles-admin-redesign.css', await readFile(new URL('./styles-admin-redesign.css', import.meta.url), 'utf8'));
 await writeOut('admin-date-tools.js', await readFile(new URL('./admin-date-tools.js', import.meta.url), 'utf8'));
 await writeOut('styles-admin-date-tools.css', await readFile(new URL('./styles-admin-date-tools.css', import.meta.url), 'utf8'));
+await writeOut('admin-notifications.js', await readFile(new URL('./admin-notifications.js', import.meta.url), 'utf8'));
+await writeOut('styles-admin-notifications.css', await readFile(new URL('./styles-admin-notifications.css', import.meta.url), 'utf8'));
 
 const shell = [
   '/',
@@ -119,8 +127,10 @@ const shell = [
   '/admin-redesign.js',
   '/styles-admin-date-tools.css',
   '/admin-date-tools.js',
+  '/styles-admin-notifications.css',
+  '/admin-notifications.js',
 ];
-const sw = `const CACHE='attendance-management-v28-generic';const SHELL=${JSON.stringify(shell)};self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request)))})\n`;
+const sw = `const CACHE='attendance-management-v28-notify-v1';const SHELL=${JSON.stringify(shell)};self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request)))})\n`;
 await writeOut('sw.js', sw);
 
-console.log('Built generic Attendance Management v28 into dist/');
+console.log('Built generic Attendance Management v28 with admin notifications into dist/');
