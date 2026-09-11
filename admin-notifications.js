@@ -52,8 +52,24 @@ function mergeAdminAttention(localAttention = [], serverAlerts = []) {
   return [...normalizedServer, ...local];
 }
 
+function localAttentionForNotificationMerge(items = []) {
+  return items.map((item) => {
+    if (item.type && item.workDate) return item;
+    const title = String(item.title || '');
+    let type = item.type || '';
+    if (title.includes('출근 예정')) type = 'missing_clock_in';
+    else if (title.includes('필수 업무')) type = 'required_checklist';
+    else if (title.includes('지각')) type = 'late';
+    return { ...item, type, workDate:item.workDate || (typeof kstDate === 'function' ? kstDate() : '') };
+  });
+}
+
+function mergedAdminAttention(snapshot) {
+  return mergeAdminAttention(localAttentionForNotificationMerge(snapshot?.attention || []), adminServerAlerts);
+}
+
 async function refreshAdminServerAlerts() {
-  if (session?.role !== 'admin' || !api?.notificationAlerts) {
+  if (typeof session === 'undefined' || session?.role !== 'admin' || typeof api === 'undefined' || !api?.notificationAlerts) {
     adminServerAlerts = [];
     return adminServerAlerts;
   }
@@ -83,6 +99,15 @@ function adminNotificationCardMarkup() {
   return `<section class="admin-side-card admin-notification-card" data-admin-notification-card><div><span>관리자 알림</span><h3>출근·퇴근 누락 알림을 받아보세요</h3><p>앱을 열어두지 않아도 확인이 필요한 근태를 알려드립니다.</p></div><button class="action-button primary-action admin-notification-enable" id="enableAdminNotifications" ${adminNotificationBusy ? 'disabled' : ''}><span>${adminNotificationBusy ? '설정 중' : '알림 켜기'}</span></button></section>`;
 }
 
+function adminNotificationAttentionMarkup(snapshot) {
+  const attention = mergedAdminAttention(snapshot);
+  if (!attention.length) return `<section class="admin-side-card admin-attention-center"><div class="admin-side-heading"><div><span>확인 필요</span><h3>모두 정상이에요</h3></div><span class="admin-status-dot is-success"></span></div><div class="admin-success-empty">오늘 확인이 필요한 항목이 없습니다.</div></section>`;
+  return `<section class="admin-side-card admin-attention-center"><div class="admin-side-heading"><div><span>확인 필요</span><h3>${attention.length}개 항목</h3></div><span class="admin-attention-count">${attention.length}</span></div><div class="admin-attention-list">${attention.map((item) => {
+    const action = item.server ? `data-admin-alert="${esc(item.alertId || '')}"` : `data-admin-staff="${esc(item.employeeId || '')}"`;
+    return `<button class="admin-attention-row is-${item.tone}" ${action}><span class="admin-attention-icon">!</span><span><b>${esc(item.title)}</b><small>${esc(item.detail)}</small></span>${icon('chevron','chevron')}</button>`;
+  }).join('')}</div></section>`;
+}
+
 function replaceAdminNotificationCard() {
   const current = document.querySelector('[data-admin-notification-card]');
   if (!current) return;
@@ -90,9 +115,26 @@ function replaceAdminNotificationCard() {
   bindAdminNotificationCard();
 }
 
+function replaceAdminAttentionCenter() {
+  if (typeof adminTodaySnapshot !== 'function' || typeof kstDate !== 'function') return;
+  const current = document.querySelector('.admin-attention-center');
+  if (!current) return;
+  current.outerHTML = adminNotificationAttentionMarkup(adminTodaySnapshot(kstDate()));
+  bindAdminNotificationAlertRows();
+}
+
 function bindAdminNotificationCard() {
   document.querySelector('#enableAdminNotifications')?.addEventListener('click', enableAdminNotifications);
   document.querySelector('#disableAdminNotifications')?.addEventListener('click', disableAdminNotifications);
+}
+
+function bindAdminNotificationAlertRows() {
+  document.querySelectorAll('[data-admin-alert]').forEach((button) => {
+    button.onclick = () => {
+      const alert = adminServerAlerts.find((row) => row.id === button.dataset.adminAlert);
+      if (alert) void openAdminAlertDestination({ alertId:alert.id, employeeId:alert.employeeId, workDate:alert.workDate });
+    };
+  });
 }
 
 async function enableAdminNotifications() {
@@ -151,6 +193,54 @@ async function disableAdminNotifications() {
   }
 }
 
+function captureAdminNotificationDestination() {
+  if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+  const params = new URLSearchParams(window.location.search);
+  const alertId = params.get('adminAlert') || '';
+  const employeeId = params.get('employee') || '';
+  const workDate = params.get('date') || '';
+  if (!alertId || !employeeId || !/^\d{4}-\d{2}-\d{2}$/.test(workDate)) return;
+  sessionStorage.setItem(ADMIN_ALERT_DESTINATION_KEY, JSON.stringify({ alertId, employeeId, workDate }));
+  params.delete('adminAlert');
+  params.delete('employee');
+  params.delete('date');
+  const query = params.toString();
+  history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`);
+}
+
+function pendingAdminNotificationDestination() {
+  if (typeof sessionStorage === 'undefined') return null;
+  try { return JSON.parse(sessionStorage.getItem(ADMIN_ALERT_DESTINATION_KEY) || 'null'); } catch { return null; }
+}
+
+async function openAdminAlertDestination({ employeeId, workDate }) {
+  if (!employeeId || !workDate || session?.role !== 'admin') return;
+  const targetMonth = workDate.slice(0,7);
+  if (workDate === kstDate()) {
+    if (month !== currentMonth()) await load(currentMonth());
+    adminSection = 'today';
+    renderAdmin();
+    setTimeout(() => openAdminStaffQuickSheet(employeeId), 80);
+    return;
+  }
+  if (month !== targetMonth) await load(targetMonth);
+  adminSection = 'work';
+  adminWorkView = 'schedule';
+  adminWorkMonth = targetMonth;
+  adminWorkSelectedDate = workDate;
+  renderAdmin();
+  setTimeout(() => openSelectedDateAttendance(employeeId, workDate), 80);
+}
+
+async function handleAdminNotificationDeepLink() {
+  if (session?.role !== 'admin') return false;
+  const destination = pendingAdminNotificationDestination();
+  if (!destination?.employeeId || !destination?.workDate) return false;
+  sessionStorage.removeItem(ADMIN_ALERT_DESTINATION_KEY);
+  await openAdminAlertDestination(destination);
+  return true;
+}
+
 async function initAdminNotifications() {
   if (session?.role !== 'admin') return;
   const support = adminNotificationSupport();
@@ -164,6 +254,12 @@ async function initAdminNotifications() {
   }
   replaceAdminNotificationCard();
   await refreshAdminServerAlerts();
+  replaceAdminAttentionCenter();
+  void handleAdminNotificationDeepLink();
+}
+
+if (typeof adminAttentionMarkup === 'function') {
+  adminAttentionMarkup = adminNotificationAttentionMarkup;
 }
 
 if (typeof adminTodayView === 'function') {
@@ -179,6 +275,9 @@ if (typeof renderAdmin === 'function') {
   renderAdmin = function renderAdminWithNotifications() {
     baseRenderAdmin();
     bindAdminNotificationCard();
+    bindAdminNotificationAlertRows();
     void initAdminNotifications();
   };
 }
+
+captureAdminNotificationDestination();
