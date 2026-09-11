@@ -20,6 +20,18 @@ const kstToday = () => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Seoul' 
 const hex = (buffer:ArrayBuffer) => [...new Uint8Array(buffer)].map((x) => x.toString(16).padStart(2,'0')).join('');
 const sha = (value:string) => crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)).then(hex);
 const nowIso = () => new Date().toISOString();
+const secretCache = new Map<string,string>();
+
+async function serverSecret(vaultName:string, envName:string) {
+  const env = Deno.env.get(envName) || '';
+  if (env) return env;
+  if (secretCache.has(vaultName)) return secretCache.get(vaultName) || '';
+  const { data, error } = await db.rpc('get_attendance_notification_secret', { p_name:vaultName });
+  if (error) throw error;
+  const value = String(data || '');
+  secretCache.set(vaultName, value);
+  return value;
+}
 
 async function requireAdmin(req:Request) {
   const header = req.headers.get('authorization') || '';
@@ -38,8 +50,8 @@ async function requireAdmin(req:Request) {
   return data;
 }
 
-function requireCron(req:Request) {
-  const expected = Deno.env.get('ATTENDANCE_NOTIFY_CRON_SECRET') || '';
+async function requireCron(req:Request) {
+  const expected = await serverSecret('attendance_notify_cron_secret', 'ATTENDANCE_NOTIFY_CRON_SECRET');
   const actual = req.headers.get('x-cron-secret') || '';
   return Boolean(expected) && actual === expected;
 }
@@ -71,7 +83,7 @@ function mapAlertRow(row:any) {
 
 async function handleConfig(req:Request) {
   if (!(await requireAdmin(req))) return out({ error:'관리자 권한이 필요합니다.' }, 403);
-  return out({ vapidPublicKey:Deno.env.get('VAPID_PUBLIC_KEY') || '' });
+  return out({ vapidPublicKey:await serverSecret('attendance_notify_vapid_public_key', 'VAPID_PUBLIC_KEY') });
 }
 
 async function handleSubscribe(req:Request) {
@@ -139,8 +151,10 @@ async function loadDetectorInput(today:string) {
 }
 
 async function sendAlertPush(alert:any, subscriptions:any[]) {
-  const publicKey = Deno.env.get('VAPID_PUBLIC_KEY') || '';
-  const privateKey = Deno.env.get('VAPID_PRIVATE_KEY') || '';
+  const [publicKey, privateKey] = await Promise.all([
+    serverSecret('attendance_notify_vapid_public_key', 'VAPID_PUBLIC_KEY'),
+    serverSecret('attendance_notify_vapid_private_key', 'VAPID_PRIVATE_KEY'),
+  ]);
   if (!publicKey || !privateKey) return { delivered:0, attempted:0 };
 
   webpush.setVapidDetails('https://attendance-management-choi18.vercel.app', publicKey, privateKey);
@@ -173,7 +187,7 @@ async function sendAlertPush(alert:any, subscriptions:any[]) {
 }
 
 async function handleScan(req:Request) {
-  if (!requireCron(req)) return out({ error:'허용되지 않은 스캔 요청입니다.' }, 403);
+  if (!(await requireCron(req))) return out({ error:'허용되지 않은 스캔 요청입니다.' }, 403);
   const body = await req.json().catch(() => ({}));
   const dryRun = body?.dryRun === true;
   const today = kstToday();
@@ -190,7 +204,7 @@ async function handleScan(req:Request) {
 
   const stamp = nowIso();
   const previousOpenKeys = new Set(input.openAlerts.map((row:any) => row.alert_key));
-  let created = detected.filter((row:any) => !previousOpenKeys.has(row.alertKey)).length;
+  const created = detected.filter((row:any) => !previousOpenKeys.has(row.alertKey)).length;
   let resolved = 0;
 
   if (detected.length) {
