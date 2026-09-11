@@ -39,6 +39,11 @@ test('attendance-notify edge function exposes protected admin and cron routes', 
   assert.equal(imports['web-push'], 'npm:web-push@3.6.7');
 });
 
+test('scan does not consume a pending Push when there are no subscribed admin devices', () => {
+  assert.match(edge, /if\s*\(result\.attempted\s*>\s*0\)/);
+  assert.match(edge, /push_sent_at:nowIso\(\)/);
+});
+
 test('admin notification client supports one-tap Push subscription', () => {
   for (const marker of ['Notification.requestPermission', 'pushManager.subscribe', 'adminNotificationSupport', 'enableAdminNotifications', 'disableAdminNotifications', 'refreshAdminServerAlerts', 'mergeAdminAttention']) {
     assert.ok(client.includes(marker), `missing ${marker}`);
