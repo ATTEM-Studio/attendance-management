@@ -18,3 +18,16 @@ test('today attendance ignores an unfinished session from a previous date', () =
   assert.match(openLookup, /work_date\s*=\s*v_today/i);
   assert.match(openLookup, /clock_out\s+is\s+null/i);
 });
+
+test('open-session uniqueness is isolated by employee and work date', () => {
+  const sql = readFileSync(migrationPath, 'utf8');
+
+  assert.match(
+    sql,
+    /drop\s+index\s+if\s+exists\s+public\.attendance_one_open_session_per_employee_idx/i,
+  );
+  assert.match(
+    sql,
+    /create\s+unique\s+index\s+attendance_one_open_session_per_employee_idx[\s\S]*?\(employee_id\s*,\s*work_date\)[\s\S]*?clock_in\s+is\s+not\s+null[\s\S]*?clock_out\s+is\s+null/i,
+  );
+});
