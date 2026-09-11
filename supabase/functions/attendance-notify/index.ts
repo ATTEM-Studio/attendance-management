@@ -244,8 +244,10 @@ async function handleScan(req:Request) {
   for (const alert of pendingPush || []) {
     const result = await sendAlertPush(alert, subscriptions || []);
     pushed += result.delivered;
-    const { error } = await db.from('notification_alerts').update({ push_sent_at:nowIso() }).eq('id', alert.id);
-    if (error) throw error;
+    if (result.attempted > 0) {
+      const { error } = await db.from('notification_alerts').update({ push_sent_at:nowIso() }).eq('id', alert.id);
+      if (error) throw error;
+    }
   }
 
   return out({ ok:true, dryRun:false, detected:detected.length, created, resolved, pushed });
