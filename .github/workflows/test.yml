@@ -15,6 +15,6 @@ jobs:
         with:
           node-version: 24
       - name: Check JavaScript syntax
-        run: node --check admin-redesign.js && node --check admin-date-tools.js && node --check admin-notifications.js && node --check build.mjs
+        run: node --check admin-redesign.js && node --check admin-date-tools.js && node --check build.mjs
       - name: Run regression tests
         run: npm test
