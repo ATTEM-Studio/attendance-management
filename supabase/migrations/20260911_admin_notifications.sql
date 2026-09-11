@@ -35,3 +35,20 @@ create index notification_alerts_open_idx on public.notification_alerts(status, 
 
 alter table public.notification_subscriptions enable row level security;
 alter table public.notification_alerts enable row level security;
+
+create or replace function public.get_attendance_notification_secret(p_name text)
+returns text
+language sql
+security definer
+set search_path = public, vault
+as $$
+  select decrypted_secret
+  from vault.decrypted_secrets
+  where name = p_name
+  limit 1;
+$$;
+
+revoke all on function public.get_attendance_notification_secret(text) from public;
+revoke all on function public.get_attendance_notification_secret(text) from anon;
+revoke all on function public.get_attendance_notification_secret(text) from authenticated;
+grant execute on function public.get_attendance_notification_secret(text) to service_role;
