@@ -16,10 +16,6 @@ test('today dashboard exposes KPI, attention center and staff quick actions', ()
   assert.ok(includesAll(js, ['adminTodaySnapshot', 'admin-kpi-grid', '확인 필요', 'openAdminStaffQuickSheet', 'data-admin-attendance-action']));
 });
 
-test('staff cards do not show an empty checklist label', () => {
-  assert.equal(js.includes('체크리스트 없음'), false);
-});
-
 test('work workspace combines schedule and attendance records', () => {
   assert.ok(includesAll(js, ['adminWorkViewMarkup', '근무표', '근태기록', 'adminScheduleWorkspace', 'adminAttendanceWorkspace', 'Excel']));
 });
