@@ -19,48 +19,6 @@
 
 모바일은 하단 Floating Navigation, 데스크톱은 좌측 Navigation Rail + Wide Operations Dashboard를 사용합니다.
 
-## 관리자 Push 알림
-
-관리자 기기에서 **홈 화면 추가 → 관리자 로그인 → 알림 켜기** 순서로 한 번 설정하면 Web Push를 받을 수 있습니다. Android/데스크톱의 지원 브라우저는 일반 브라우저에서도 동작하며, iPhone/iPad는 홈 화면에 추가한 PWA에서 알림 허용을 권장합니다.
-
-v1 기본 알림은 다음 네 종류입니다.
-
-- 출근 미처리: 예정 출근시간 +10분
-- 퇴근 미처리: 예정 퇴근시간 +15분
-- 전날 미퇴근: 과거 날짜의 열린 근태 발견 시
-- 필수 체크리스트 미완료: 예정 퇴근시간 이후
-
-동일 `alert_key`는 한 번만 Push fan-out 하며, 문제 해결 후 앱 내 활성 알림에서 제거합니다. 알림 기능은 출퇴근·근무표·체크리스트 원본 데이터를 자동 변경하지 않습니다.
-
-### 운영 비밀값
-
-실제 값은 Git에 저장하지 않습니다. 현재 구현은 Supabase Vault를 우선 사용하고, Edge 환경변수가 설정된 경우 이를 우선할 수 있습니다.
-
-Vault names:
-
-- `attendance_notify_vapid_public_key`
-- `attendance_notify_vapid_private_key`
-- `attendance_notify_cron_secret`
-- `attendance_notify_scan_url`
-
-Edge env fallback names:
-
-- `VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
-- `ATTENDANCE_NOTIFY_CRON_SECRET`
-
-Cron job name:
-
-- `attendance-notify-every-5-minutes`
-
-Cron을 중지할 때는 Supabase SQL에서 아래와 같이 실행합니다.
-
-```sql
-select cron.unschedule('attendance-notify-every-5-minutes');
-```
-
-운영 Cron은 Preview, dryRun, 실제 관리자 기기 Push 검증을 모두 통과한 뒤에만 활성화합니다.
-
 ## Generic branding
 
 앱의 표시명은 `근태관리`로 통일합니다.
@@ -88,12 +46,7 @@ npm run build
 - `build.mjs` — v27 baseline을 가져와 범용 v28 dist를 생성
 - `admin-redesign.js` — 관리자 Today / Work / Operations UI 및 interaction
 - `admin-date-tools.js` — 선택 날짜 근태 조회·수정 및 빠른 근무표 편집
-- `admin-notifications.js` — 관리자 Push 구독, 앱 내 알림 병합, 딥링크
-- `supabase/functions/attendance-notify/` — 이상 감지 API와 Web Push fan-out
-- `supabase/migrations/20260911_admin_notifications.sql` — 알림 저장소와 서버 전용 Vault bridge
 - `tests/admin-redesign.test.mjs` — 관리자 리디자인 회귀 테스트
-- `tests/admin-notifications.test.mjs` — 알림/Push 계약 회귀 테스트
-- `tests/notification-core.test.mjs` — 이상 감지 경계값 테스트
 - `tests/branding-neutralization.test.mjs` — 특정 업체 브랜딩 재유입 방지 테스트
 - `docs/admin-redesign-v28.md` — 승인된 관리자 UX 스펙
 
