@@ -1,3 +1,10 @@
+drop index if exists public.attendance_one_open_session_per_employee_idx;
+
+create unique index attendance_one_open_session_per_employee_idx
+on public.attendance (employee_id, work_date)
+where clock_in is not null
+  and clock_out is null;
+
 create or replace function public.record_attendance_action_v3(p_employee_id uuid, p_action text)
 returns attendance
 language plpgsql
