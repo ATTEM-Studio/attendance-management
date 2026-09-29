@@ -91,6 +91,12 @@ if (!index.includes('/admin-redesign.js')) {
 if (!index.includes('/admin-date-tools.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-date-tools.js"></script><script src="/boot.js"></script>');
 }
+if (!index.includes('/checklist-presets-data.js')) {
+  index = index.replace('<script src="/boot.js"></script>', '<script src="/checklist-presets-data.js"></script><script src="/boot.js"></script>');
+}
+if (!index.includes('/checklist-presets.js')) {
+  index = index.replace('<script src="/boot.js"></script>', '<script src="/checklist-presets.js"></script><script src="/boot.js"></script>');
+}
 await writeOut('index.html', index);
 
 let core = await readFile(path.join(OUT.pathname, 'core.js'), 'utf8');
@@ -112,6 +118,8 @@ await writeOut('admin-redesign.js', adminRedesign);
 await writeOut('styles-admin-redesign.css', await readFile(new URL('./styles-admin-redesign.css', import.meta.url), 'utf8'));
 await writeOut('admin-date-tools.js', await readFile(new URL('./admin-date-tools.js', import.meta.url), 'utf8'));
 await writeOut('styles-admin-date-tools.css', await readFile(new URL('./styles-admin-date-tools.css', import.meta.url), 'utf8'));
+await writeOut('checklist-presets-data.js', await readFile(new URL('./checklist-presets-data.js', import.meta.url), 'utf8'));
+await writeOut('checklist-presets.js', await readFile(new URL('./checklist-presets.js', import.meta.url), 'utf8'));
 
 const shell = [
   '/',
@@ -120,6 +128,8 @@ const shell = [
   '/admin-redesign.js',
   '/styles-admin-date-tools.css',
   '/admin-date-tools.js',
+  '/checklist-presets-data.js',
+  '/checklist-presets.js',
 ];
 const sw = `const CACHE='attendance-management-v28-core-v1';const SHELL=${JSON.stringify(shell)};self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request)))})\n`;
 await writeOut('sw.js', sw);
