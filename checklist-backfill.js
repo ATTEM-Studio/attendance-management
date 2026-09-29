@@ -24,26 +24,20 @@ function findChecklistBackfillGroups(snapshot, today) {
     if (!scheduleTypes.length) continue;
 
     const weekday = checklistWeekdayForDate(schedule.workDate);
-    const expectedTypes = new Set(
-      templates
-        .filter((template) =>
-          scheduleTypes.includes(template.shiftType) &&
-          (template.weekdays || []).map(Number).includes(weekday)
-        )
-        .map((template) => template.shiftType)
+    const expectedTemplates = templates.filter((template) =>
+      scheduleTypes.includes(template.shiftType) &&
+      (template.weekdays || []).map(Number).includes(weekday)
     );
-    if (!expectedTypes.size) continue;
+    const expectedCount = expectedTemplates.reduce((sum, template) => sum + (template.items?.length || 0), 0);
+    if (!expectedCount) continue;
 
-    const existingTypes = new Set(
-      assignments
-        .filter((task) =>
-          task.employeeId === schedule.employeeId &&
-          task.workDate === schedule.workDate &&
-          task.sourceType === 'checklist'
-        )
-        .map((task) => task.shiftType)
-    );
-    if ([...expectedTypes].every((type) => existingTypes.has(type))) continue;
+    const existingCount = assignments.filter((task) =>
+      task.employeeId === schedule.employeeId &&
+      task.workDate === schedule.workDate &&
+      task.sourceType === 'checklist' &&
+      scheduleTypes.includes(task.shiftType)
+    ).length;
+    if (existingCount >= expectedCount) continue;
 
     const key = [
       schedule.employeeId,
