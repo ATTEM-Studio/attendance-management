@@ -12,8 +12,8 @@ test('checklist backfill skips past dates and repairs current/future schedules o
 
   const state = {
     checklistTemplates:[
-      { id:'open-t', shiftType:'open', active:true, weekdays:[0,1,2,3,4,5,6] },
-      { id:'close-t', shiftType:'close', active:true, weekdays:[0,1,2,3,4,5,6] },
+      { id:'open-t', shiftType:'open', active:true, weekdays:[0,1,2,3,4,5,6], items:[{},{},{}] },
+      { id:'close-t', shiftType:'close', active:true, weekdays:[0,1,2,3,4,5,6], items:[{},{}] },
     ],
     schedules:[
       { employeeId:'e1', workDate:'2026-09-28', scheduledStart:'08:00', scheduledEnd:'11:00', shiftType:'open' },
@@ -24,6 +24,7 @@ test('checklist backfill skips past dates and repairs current/future schedules o
       { employeeId:'e4', workDate:'2026-09-29', scheduledStart:'12:00', scheduledEnd:'18:00', shiftType:'middle' },
     ],
     taskAssignments:[
+      { employeeId:'e2', workDate:'2026-09-29', sourceType:'checklist', shiftType:'close', status:'pending' },
       { employeeId:'e2', workDate:'2026-09-29', sourceType:'checklist', shiftType:'close', status:'pending' },
     ],
   };
@@ -36,6 +37,7 @@ test('checklist backfill skips past dates and repairs current/future schedules o
   assert.ok(dates.includes('2026-09-30'));
   assert.ok(groups.some((group) => group.employeeId === 'e1'));
   assert.ok(groups.some((group) => group.employeeId === 'e3'));
+  assert.ok(groups.some((group) => group.employeeId === 'e1' && group.workDates.includes('2026-09-29')));
   assert.ok(!groups.some((group) => group.employeeId === 'e2'));
   assert.ok(!groups.some((group) => group.employeeId === 'e4'));
 
