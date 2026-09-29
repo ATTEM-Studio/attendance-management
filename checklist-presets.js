@@ -38,8 +38,13 @@
         haptic(10);
         openChecklistManager();
       } catch (error) {
+        try {
+          await load(month);
+          openChecklistManager();
+        } catch {
+          if (button?.isConnected) setPending(button, false);
+        }
         toastMsg(error?.message || '기본 템플릿을 추가하지 못했습니다.');
-        if (button?.isConnected) setPending(button, false);
       }
     };
   }
