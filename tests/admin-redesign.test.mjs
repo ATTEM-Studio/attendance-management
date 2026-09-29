@@ -32,7 +32,7 @@ test('responsive design provides mobile bottom nav and desktop rail', () => {
 });
 
 test('build is pinned to immutable v27 and produces v28 cache', () => {
-  assert.ok(build.includes('attendance-management-mp0va9jtl-choi18.vercel.app'));
+  assert.ok(build.includes('attendance-management-dcpp95jnz-choi18.vercel.app'));
   assert.ok(build.includes("attendance-management-v28"));
   assert.ok(build.includes('/styles-admin-redesign.css'));
   assert.ok(build.includes('/admin-redesign.js'));
