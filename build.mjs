@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const BASE = 'https://attendance-management-mp0va9jtl-choi18.vercel.app';
+const BASE = 'https://attendance-management-dcpp95jnz-choi18.vercel.app';
 const OUT = new URL('./dist/', import.meta.url);
 const PRODUCT_NAME = '근태관리';
 const PRODUCT_DESCRIPTION = '직원 근무 일정과 출퇴근을 관리하는 근태관리 시스템';
