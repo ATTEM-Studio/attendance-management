@@ -20,14 +20,16 @@ test('multi-shift admin tools render base and extra shifts for the same employee
     adminWorkSelectedDate:'2026-09-30',
     month:'2026-09', adminWorkMonth:'2026-09',
     selectedDateScheduleEditorMarkup:()=>'', openSelectedDateScheduleEditor(){},
-    employeeById(id){return this.state.employees.find(e=>e.id===id);},
-    activeEmployees(){return this.state.employees.filter(e=>e.active);},
+    employeeById:null,
+    activeEmployees:null,
     esc:v=>String(v??''), longDate:()=> '9월 30일 (수)', shiftTypeLabel:t=>({open:'오픈',close:'마감'}[t]||'기타'),
     dateToolShiftOptions:()=>'<option></option>', field:()=>'', icon:()=>'', externalRequest:async()=>({}),
     openSheet(){}, dismissLayer(){}, toastMsg(){}, haptic(){}, setPending(){}, renderAdmin(){},
     refreshSelectedDateContext:async()=>{}, document:{querySelector:()=>null,querySelectorAll:()=>[]},
     setTimeout(fn){fn();}, console,
   };
+  context.employeeById=(id)=>context.state.employees.find((e)=>e.id===id);
+  context.activeEmployees=()=>context.state.employees.filter((e)=>e.active);
   context.globalThis=context;
   vm.createContext(context);
   vm.runInContext(source, context);
