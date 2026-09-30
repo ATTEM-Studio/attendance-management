@@ -89,3 +89,25 @@ export function buildMissingChecklistRows({ today, schedules = [], templates = [
 
   return rows.filter((row) => row.title);
 }
+
+
+function checklistKey(row = {}) {
+  const task = camel(row);
+  return [task.employeeId, task.workDate, task.shiftType, task.title].join('|');
+}
+
+export function buildChecklistSyncPlan({ today, schedules = [], templates = [], existing = [] }) {
+  const insertRows = buildMissingChecklistRows({ today, schedules, templates, existing });
+  const expectedKeys = new Set(
+    buildMissingChecklistRows({ today, schedules, templates, existing:[] })
+      .map((row) => checklistKey(row))
+  );
+  const deleteIds = existing
+    .filter((row) => {
+      const task = camel(row);
+      const status = row.status ?? 'pending';
+      return row.id && task.workDate >= today && task.sourceType === 'checklist' && status !== 'completed' && !expectedKeys.has(checklistKey(row));
+    })
+    .map((row) => row.id);
+  return { insertRows, deleteIds };
+}
