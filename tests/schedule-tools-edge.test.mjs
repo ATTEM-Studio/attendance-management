@@ -9,7 +9,7 @@ import {
 
 test('extra schedule validation supports multiple non-overlapping shifts', () => {
   const ok=validateExtraScheduleInput({
-    employeeId:'11111111-1111-1111-1111-111111111111',
+    employeeId:'11111111-1111-4111-8111-111111111111',
     workDate:'2026-09-30',
     scheduledStart:'18:00',
     scheduledEnd:'22:00',
