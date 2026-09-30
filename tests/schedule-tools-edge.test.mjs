@@ -5,6 +5,7 @@ import {
   scheduleShiftTypes,
   validateExtraScheduleInput,
   buildMissingChecklistRows,
+  buildChecklistSyncPlan,
 } from '../supabase/functions/attendance-schedule-tools/schedule-tools.mjs';
 
 test('extra schedule validation supports multiple non-overlapping shifts', () => {
@@ -55,4 +56,21 @@ test('migration and edge function keep extra schedules server-side and sync chec
   assert.match(edge,/task_assignments/);
   assert.match(edge,/checklist_templates/);
   assert.match(helper,/source_type:\s*'checklist'/);
+});
+
+
+test('checklist sync removes only obsolete pending checklist rows', () => {
+  const plan=buildChecklistSyncPlan({
+    today:'2026-09-30',
+    schedules:[{employeeId:'e1',workDate:'2026-09-30',shiftType:'open'}],
+    templates:[{id:'t1',shiftType:'open',active:true,weekdays:[3],items:[{title:'오픈 준비',required:true,sortOrder:0}]}],
+    existing:[
+      {id:'keep',employeeId:'e1',workDate:'2026-09-30',sourceType:'checklist',shiftType:'open',title:'오픈 준비',status:'pending'},
+      {id:'remove',employeeId:'e1',workDate:'2026-09-30',sourceType:'checklist',shiftType:'close',title:'마감 정리',status:'pending'},
+      {id:'completed',employeeId:'e1',workDate:'2026-09-30',sourceType:'checklist',shiftType:'close',title:'완료 기록',status:'completed'},
+      {id:'past',employeeId:'e1',workDate:'2026-09-29',sourceType:'checklist',shiftType:'close',title:'과거 기록',status:'pending'},
+    ],
+  });
+  assert.deepEqual(plan.deleteIds,['remove']);
+  assert.equal(plan.insertRows.length,0);
 });
