@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { buildMissingChecklistRows, validateExtraScheduleInput } from './schedule-tools.mjs';
+import { buildChecklistSyncPlan, validateExtraScheduleInput } from './schedule-tools.mjs';
 
 const H = {
   'Access-Control-Allow-Origin':'*',
@@ -92,18 +92,22 @@ async function syncChecklists(session:any, body:any={}) {
   const minDate=dates[0];
   const maxDate=dates[dates.length-1];
 
-  const [{data:templates,error:templateError},{data:existing,error:existingError}]=await Promise.all([
+  const [{data:templates,error:templateError},{data:items,error:itemError},{data:existing,error:existingError}]=await Promise.all([
     db.from('checklist_templates')
-      .select('id,shift_type,weekdays,active,checklist_template_items(id,title,description,required,sort_order)')
+      .select('id,shift_type,weekdays,active')
       .eq('active',true),
+    db.from('checklist_template_items')
+      .select('id,template_id,title,description,required,sort_order')
+      .order('sort_order'),
     db.from('task_assignments')
-      .select('employee_id,work_date,title,source_type,shift_type')
+      .select('id,employee_id,work_date,title,status,source_type,shift_type')
       .in('employee_id',employeeIds)
       .gte('work_date',minDate)
       .lte('work_date',maxDate)
       .eq('source_type','checklist'),
   ]);
   if (templateError) throw templateError;
+  if (itemError) throw itemError;
   if (existingError) throw existingError;
 
   const normalizedTemplates=(templates || []).map((template:any)=>({
@@ -111,18 +115,22 @@ async function syncChecklists(session:any, body:any={}) {
     shiftType:template.shift_type,
     weekdays:template.weekdays || [],
     active:template.active,
-    items:(template.checklist_template_items || []).map((item:any)=>({
+    items:(items || []).filter((item:any)=>item.template_id===template.id).map((item:any)=>({
       id:item.id,title:item.title,description:item.description || '',
       required:item.required !== false,sortOrder:Number(item.sort_order || 0),
     })),
   }));
 
-  const rows=buildMissingChecklistRows({today:today(),schedules,templates:normalizedTemplates,existing:existing || []});
-  if (!rows.length) return {created:0};
-
-  const {error:insertError}=await db.from('task_assignments').insert(rows);
-  if (insertError) throw insertError;
-  return {created:rows.length};
+  const plan=buildChecklistSyncPlan({today:today(),schedules,templates:normalizedTemplates,existing:existing || []});
+  if (plan.deleteIds.length) {
+    const {error:deleteError}=await db.from('task_assignments').delete().in('id',plan.deleteIds);
+    if (deleteError) throw deleteError;
+  }
+  if (plan.insertRows.length) {
+    const {error:insertError}=await db.from('task_assignments').insert(plan.insertRows);
+    if (insertError) throw insertError;
+  }
+  return {created:plan.insertRows.length,removed:plan.deleteIds.length};
 }
 
 async function overlapExists(payload:any, ignoreId='') {
@@ -197,8 +205,13 @@ Deno.serve(async (req:Request)=>{
     if (action==='delete_extra') {
       const id=String(body.id || '').trim();
       if (!id) return out({error:'삭제할 추가 근무를 확인해 주세요.'},400);
+      const {data:existingExtra,error:lookupError}=await db.from('extra_schedules').select('employee_id,work_date').eq('id',id).maybeSingle();
+      if (lookupError) throw lookupError;
       const {error}=await db.from('extra_schedules').delete().eq('id',id);
       if (error) throw error;
+      if (existingExtra) {
+        await syncChecklists(session,{month:monthOf(existingExtra.work_date),employeeId:existingExtra.employee_id});
+      }
       return out({ok:true});
     }
 
