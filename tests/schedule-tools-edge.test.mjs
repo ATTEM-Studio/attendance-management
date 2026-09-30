@@ -43,9 +43,10 @@ test('checklist sync creates only missing current/future checklist rows', () => 
 });
 
 test('migration and edge function keep extra schedules server-side and sync checklist tasks', async () => {
-  const [migration,edge]=await Promise.all([
+  const [migration,edge,helper]=await Promise.all([
     readFile('supabase/migrations/20260930_multi_shift_schedules.sql','utf8'),
     readFile('supabase/functions/attendance-schedule-tools/index.ts','utf8'),
+    readFile('supabase/functions/attendance-schedule-tools/schedule-tools.mjs','utf8'),
   ]);
   assert.match(migration,/create table if not exists public\.extra_schedules/i);
   assert.match(migration,/enable row level security/i);
@@ -53,5 +54,5 @@ test('migration and edge function keep extra schedules server-side and sync chec
   assert.match(edge,/extra_schedules/);
   assert.match(edge,/task_assignments/);
   assert.match(edge,/checklist_templates/);
-  assert.match(edge,/source_type:\s*'checklist'/);
+  assert.match(helper,/source_type:\s*'checklist'/);
 });
