@@ -31,7 +31,7 @@ export function validateExtraScheduleInput(input = {}) {
 }
 
 function weekdayOf(workDate) {
-  return new Date(`${workDate}T00:00:00+09:00`).getDay();
+  return new Date(`${workDate}T00:00:00Z`).getUTCDay();
 }
 
 function camel(row = {}) {
