@@ -14,7 +14,7 @@ function normalizeSegment(row,segmentType='base'){
     workDate:text(row.workDate??row.work_date),
     scheduledStart:text(row.scheduledStart??row.scheduled_start).slice(0,5),
     scheduledEnd:text(row.scheduledEnd??row.scheduled_end).slice(0,5),
-    shiftType:text(row.shiftType??row.shift_type||'other')||'other',
+    shiftType:text((row.shiftType??row.shift_type) || 'other')||'other',
     segmentType,
   };
 }
