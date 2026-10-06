@@ -63,6 +63,7 @@ export function buildMissingChecklistRows({ today, schedules = [], templates = [
     const weekday = weekdayOf(schedule.workDate);
 
     for (const template of templates) {
+      const templateId = template.id ?? template.template_id;
       const templateShift = template.shiftType ?? template.shift_type;
       const weekdays = (template.weekdays || []).map(Number);
       const active = template.active !== false;
@@ -76,9 +77,12 @@ export function buildMissingChecklistRows({ today, schedules = [], templates = [
           employee_id:schedule.employeeId,
           work_date:schedule.workDate,
           title:String(item.title || '').trim(),
-          description:String(item.description || '').trim(),
+          description:String(item.description || '').trim() || null,
           status:'pending',
+          created_by:'체크리스트',
           source_type:'checklist',
+          template_id:templateId || null,
+          template_item_id:item.id || null,
           shift_type:templateShift,
           required:item.required !== false,
           sort_order:Number(item.sortOrder ?? item.sort_order ?? index),
@@ -89,7 +93,6 @@ export function buildMissingChecklistRows({ today, schedules = [], templates = [
 
   return rows.filter((row) => row.title);
 }
-
 
 function checklistKey(row = {}) {
   const task = camel(row);
