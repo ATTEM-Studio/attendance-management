@@ -51,14 +51,17 @@ test('preview reloads server schedules extras and attendance before calculating 
 
 test('apply recomputes current protection state and uses atomic RPC',async()=>{
   const {edge}=await sources();
-  const applyStart=edge.indexOf("action==='apply'");
-  assert.ok(applyStart>=0);
-  const applySource=edge.slice(applyStart);
-  assert.match(applySource,/loadScheduleImportContext/);
-  assert.match(applySource,/buildScheduleImportDiff/);
-  assert.match(applySource,/rpc\(['"]apply_schedule_import['"]/);
-  assert.match(applySource,/status:['"]applied['"]/);
-  assert.match(applySource,/sync_checklists/);
+  const helperStart=edge.indexOf('async function applyScheduleImport');
+  const dispatchStart=edge.indexOf("action==='apply'");
+  assert.ok(helperStart>=0 && dispatchStart>helperStart);
+  const helperSource=edge.slice(helperStart,dispatchStart);
+  assert.match(helperSource,/loadScheduleImportContext/);
+  assert.match(helperSource,/buildScheduleImportDiff/);
+  assert.match(helperSource,/rpc\(['"]apply_schedule_import['"]/);
+  assert.match(helperSource,/status:['"]applied['"]/);
+  assert.match(helperSource,/syncImportedChecklists/);
+  const dispatchSource=edge.slice(dispatchStart,edge.indexOf("action==='save_alias'"));
+  assert.match(dispatchSource,/applyScheduleImport\(source,runId,rawToken\)/);
 });
 
 test('image action checks request before OpenAI and missing key fails clearly',async()=>{
