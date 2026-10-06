@@ -17,7 +17,7 @@ test('staff calendar models past, today, future and extra shifts', async () => {
         {id:'x1',employeeId:'e1',workDate:'2026-10-08',scheduledStart:'18:00',scheduledEnd:'22:00',shiftType:'close',segmentType:'extra'},
       ],
       attendance:[
-        {employeeId:'e1',workDate:'2026-10-05',clockIn:'2026-10-05T09:03:00+09:00',clockOut:'2026-10-05T14:01:00+09:00',sessionNo:1},
+        {employeeId:'e1',workDate:'2026-10-05',clockIn:'2026-10-05T09:03:00+09:00',clockOut:'2026-10-05T14:01:00+09:00',sessionNo:1,workMinutes:298},
       ],
     },
     session:{role:'staff',employeeId:'e1',token:'t'},
@@ -26,16 +26,24 @@ test('staff calendar models past, today, future and extra shifts', async () => {
     esc:(v)=>String(v??''),
     shiftTypeLabel:(v)=>({open:'오픈',middle:'미들',close:'마감',other:'기타'}[v]||v),
     fmtTime:(v)=> String(v||'').slice(11,16),
-    dailyAttendanceSummary:(employeeId,date)=>({
-      sessions:(context.state.attendance||[]).filter((row)=>row.employeeId===employeeId&&row.workDate===date),
-      open:null,
-      completed:(context.state.attendance||[]).filter((row)=>row.employeeId===employeeId&&row.workDate===date&&row.clockOut),
-    }),
+    formatMinutes:(v)=> `${v}분`,
+    longDate:(v)=>v,
+    attendanceSessionsFor:(employeeId,date)=>(context.state.attendance||[]).filter((row)=>row.employeeId===employeeId&&row.workDate===date),
+    dailyAttendanceSummary:(employeeId,date)=>{
+      const sessions=(context.state.attendance||[]).filter((row)=>row.employeeId===employeeId&&row.workDate===date);
+      return {
+        sessions,
+        open:sessions.find((row)=>row.clockIn&&!row.clockOut)||null,
+        completed:sessions.filter((row)=>row.clockIn&&row.clockOut),
+        totalWorkMinutes:sessions.reduce((sum,row)=>sum+Number(row.workMinutes||0),0),
+      };
+    },
+    openSheet(){},
     document:{querySelector:()=>null,querySelectorAll:()=>[]},
-    renderStaff(){},
-    load:async()=>{},
+    recordCell(){},
+    openRecordDetail(){},
+    renderRecords(){},
     console,
-    setTimeout(fn){fn();},
   };
   context.globalThis=context;
   vm.createContext(context);
@@ -55,12 +63,13 @@ test('staff calendar models past, today, future and extra shifts', async () => {
   assert.match(future.summary,/18:00–22:00/);
 });
 
-test('staff calendar markup is read-only and month navigable', async () => {
+test('staff records calendar becomes a read-only work schedule calendar', async () => {
   const source = await readFile('staff-calendar.js','utf8');
   assert.match(source,/내 근무 일정/);
-  assert.match(source,/data-staff-calendar-prev/);
-  assert.match(source,/data-staff-calendar-next/);
-  assert.match(source,/data-staff-calendar-date/);
+  assert.match(source,/recordCell\s*=\s*staffCalendarRecordCell/);
+  assert.match(source,/openRecordDetail\s*=\s*staffCalendarOpenDetail/);
+  assert.match(source,/예정/);
+  assert.match(source,/추가 근무/);
   assert.doesNotMatch(source,/saveExtraSchedule|bulkSchedule|deleteExtraSchedule/);
 });
 
