@@ -64,6 +64,16 @@ test('apply recomputes current protection state and uses atomic RPC',async()=>{
   assert.match(dispatchSource,/applyScheduleImport\(source,runId,rawToken\)/);
 });
 
+test('apply is bound to the exact preview source fingerprint',async()=>{
+  const {edge}=await sources();
+  const helperStart=edge.indexOf('async function applyScheduleImport');
+  const dispatchStart=edge.indexOf("action==='apply'");
+  const helperSource=edge.slice(helperStart,dispatchStart);
+  assert.match(helperSource,/source_fingerprint/);
+  assert.match(helperSource,/run\.source_fingerprint\s*!==\s*source\.sourceFingerprint/);
+  assert.match(helperSource,/미리보기와 적용 파일이 달라졌습니다/);
+});
+
 test('image action checks request before OpenAI and missing key fails clearly',async()=>{
   const {edge}=await sources();
   const block=edge.slice(edge.indexOf("action==='analyze_image'"),edge.indexOf("action==='preview'"));
