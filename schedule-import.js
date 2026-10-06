@@ -7,6 +7,7 @@ if (typeof api !== 'undefined' && typeof externalRequest === 'function') {
   api.applyScheduleImport = (token,payload) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'apply',...payload}});
   api.analyzeScheduleImage = (token,payload) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'analyze_image',...payload}});
   api.saveScheduleImportAlias = (token,payload) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'save_alias',...payload}});
+  api.listScheduleImportAliases = (token) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'aliases'}});
 }
 
 let scheduleImportState = null;
@@ -146,6 +147,26 @@ function uniqueEmployeeLabels(rows) {
   return [...new Set((rows||[]).map((row)=>String(row.employeeLabel||'').trim()).filter(Boolean))];
 }
 
+async function loadScheduleImportAliases() {
+  if (typeof api?.listScheduleImportAliases !== 'function' || !session?.token) return scheduleImportState.aliases;
+  try {
+    const result=await api.listScheduleImportAliases(session.token);
+    const loaded={};
+    for (const row of result?.aliases || []) {
+      const employeeId=String(row?.employee_id || '').trim();
+      const originalLabel=String(row?.original_label || '').trim();
+      const labelKey=String(row?.label_key || '').trim();
+      if (!employeeId) continue;
+      if (originalLabel) loaded[originalLabel]=employeeId;
+      if (labelKey) loaded[labelKey]=employeeId;
+    }
+    scheduleImportState.aliases={...loaded,...scheduleImportState.aliases};
+  } catch (error) {
+    console.warn('Saved schedule import aliases unavailable:',error);
+  }
+  return scheduleImportState.aliases;
+}
+
 function rematchScheduleImportRows() {
   const employees=typeof activeEmployees==='function'?activeEmployees():(state?.employees||[]).filter((row)=>row.active!==false);
   scheduleImportState.employeeMatches=uniqueEmployeeLabels(scheduleImportState.shifts).map((label)=>({label,match:ScheduleImportCore.matchEmployeeLabel(label,employees,scheduleImportState.aliases)}));
@@ -194,7 +215,7 @@ async function handleScheduleImportFile(file) {
   throw new Error('지원 형식은 .xlsx, .png, .jpg, .jpeg, .webp 입니다.');
 }
 
-function parseSelectedScheduleImportRegion() {
+async function parseSelectedScheduleImportRegion() {
   scheduleImportState.targetMonth=document.querySelector?.('#scheduleImportMonth')?.value || scheduleImportState.targetMonth;
   scheduleImportState.effectiveDate=clampEffectiveDate(document.querySelector?.('#scheduleImportEffective')?.value || scheduleImportState.effectiveDate);
   if (scheduleImportState.sourceType==='xlsx') {
@@ -207,6 +228,7 @@ function parseSelectedScheduleImportRegion() {
   } else {
     scheduleImportState.shifts=(scheduleImportState.shifts||[]).filter((row)=>!row.workDate || row.workDate>=scheduleImportState.effectiveDate);
   }
+  await loadScheduleImportAliases();
   rematchScheduleImportRows();
   scheduleImportState.step=3;
 }
@@ -236,7 +258,7 @@ function bindScheduleImportSheet() {
   if (file) file.onchange=async(event)=>{try{setPending?.(event.target,true,'분석 중');await handleScheduleImportFile(event.target.files?.[0]);}catch(error){scheduleImportState.error=error.message;toastMsg?.(error.message);reopenScheduleImport();}};
   document.querySelectorAll?.('[data-import-region]').forEach((button)=>{button.onclick=()=>{scheduleImportState.candidateRegionId=button.dataset.importRegion;reopenScheduleImport();};});
   const parseButton=document.querySelector?.('#scheduleImportParse');
-  if (parseButton) parseButton.onclick=()=>{try{parseSelectedScheduleImportRegion();reopenScheduleImport();}catch(error){toastMsg?.(error.message);}};
+  if (parseButton) parseButton.onclick=async()=>{setPending?.(parseButton,true,'확인 중');try{await parseSelectedScheduleImportRegion();reopenScheduleImport();}catch(error){toastMsg?.(error.message);}finally{if(parseButton?.isConnected)setPending?.(parseButton,false);}};
   document.querySelectorAll?.('[data-import-alias]').forEach((select)=>{select.onchange=async()=>{const label=select.dataset.importAlias;const employeeId=select.value;if(!employeeId)return;scheduleImportState.aliases[label]=employeeId;try{await api.saveScheduleImportAlias(session.token,{label,employeeId});}catch(error){console.warn('Alias save skipped:',error);}rematchScheduleImportRows();reopenScheduleImport();};});
   const preview=document.querySelector?.('#scheduleImportPreview');
   if(preview) preview.onclick=async()=>{setPending?.(preview,true,'비교 중');try{await requestScheduleImportPreview();reopenScheduleImport();}catch(error){toastMsg?.(error.message);}finally{if(preview?.isConnected)setPending?.(preview,false);}};
