@@ -85,6 +85,12 @@ if (!index.includes('/styles-admin-redesign.css')) {
 if (!index.includes('/styles-admin-date-tools.css')) {
   index = index.replace('</head>', '<link rel="stylesheet" href="/styles-admin-date-tools.css"></head>');
 }
+if (!index.includes('/styles-multi-shift.css')) {
+  index = index.replace('</head>', '<link rel="stylesheet" href="/styles-multi-shift.css"></head>');
+}
+if (!index.includes('/styles-staff-calendar.css')) {
+  index = index.replace('</head>', '<link rel="stylesheet" href="/styles-staff-calendar.css"></head>');
+}
 if (!index.includes('/admin-redesign.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-redesign.js"></script><script src="/boot.js"></script>');
 }
@@ -100,8 +106,8 @@ if (!index.includes('/checklist-presets.js')) {
 if (!index.includes('/multi-shift.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/multi-shift.js"></script><script src="/boot.js"></script>');
 }
-if (!index.includes('/styles-multi-shift.css')) {
-  index = index.replace('</head>', '<link rel="stylesheet" href="/styles-multi-shift.css"></head>');
+if (!index.includes('/staff-calendar.js')) {
+  index = index.replace('<script src="/boot.js"></script>', '<script src="/staff-calendar.js"></script><script src="/boot.js"></script>');
 }
 await writeOut('index.html', index);
 
@@ -128,6 +134,8 @@ await writeOut('checklist-presets-data.js', await readFile(new URL('./checklist-
 await writeOut('checklist-presets.js', await readFile(new URL('./checklist-presets.js', import.meta.url), 'utf8'));
 await writeOut('multi-shift.js', await readFile(new URL('./multi-shift.js', import.meta.url), 'utf8'));
 await writeOut('styles-multi-shift.css', await readFile(new URL('./styles-multi-shift.css', import.meta.url), 'utf8'));
+await writeOut('staff-calendar.js', await readFile(new URL('./staff-calendar.js', import.meta.url), 'utf8'));
+await writeOut('styles-staff-calendar.css', await readFile(new URL('./styles-staff-calendar.css', import.meta.url), 'utf8'));
 
 const shell = [
   '/',
@@ -140,8 +148,10 @@ const shell = [
   '/checklist-presets.js',
   '/multi-shift.js',
   '/styles-multi-shift.css',
+  '/staff-calendar.js',
+  '/styles-staff-calendar.css',
 ];
-const sw = `const CACHE='attendance-management-v28-core-v2';const SHELL=${JSON.stringify(shell)};self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request)))})\n`;
+const sw = `const CACHE='attendance-management-v28-core-v3';const SHELL=${JSON.stringify(shell)};self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request)))})\n`;
 await writeOut('sw.js', sw);
 
 console.log('Built generic Attendance Management v28 into dist/');
