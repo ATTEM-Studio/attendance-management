@@ -35,6 +35,12 @@ test('successful apply refreshes the target month and admin work view',()=>{
   assert.match(source,/근무표를 적용했습니다/);
 });
 
+test('image imports use a real SHA-256 source fingerprint rather than a constant',()=>{
+  assert.match(source,/await\s+file\.arrayBuffer\(\)/);
+  assert.match(source,/ScheduleImportCore\.fingerprintArrayBuffer/);
+  assert.doesNotMatch(source,/sourceFingerprint\s*=\s*['"]image['"]/);
+});
+
 test('client never mutates schedule arrays directly during import and API errors stay actionable',()=>{
   assert.doesNotMatch(source,/state\.schedules\s*=/);
   assert.doesNotMatch(source,/state\.extraSchedules\s*=/);
