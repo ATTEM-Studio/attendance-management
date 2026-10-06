@@ -151,6 +151,7 @@ async function applyScheduleImport(source:any,runId:string,rawToken:string){
   if(runError) throw runError;
   if(!run||run.status!=='previewed') return out({error:'적용 가능한 미리보기 이력이 아닙니다.'},409);
   if(run.target_month!==source.targetMonth||String(run.effective_date)!==source.effectiveDate||run.source_type!==source.sourceType) return out({error:'미리보기와 적용 조건이 달라졌습니다.'},409);
+  if(run.source_fingerprint!==source.sourceFingerprint) return out({error:'미리보기와 적용 파일이 달라졌습니다.'},409);
 
   // Re-load current state immediately before the atomic RPC. This catches preview→apply attendance races.
   const current=await loadScheduleImportContext(source.targetMonth,source.effectiveDate,source.shifts);
