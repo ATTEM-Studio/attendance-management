@@ -28,7 +28,7 @@
 
   function parseGridHour(value) {
     const raw = text(value);
-    const match = raw.match(/^(\d{1,2})(?::(\d{2}))?\s*$/);
+    const match = raw.match(/^(\d{1,2})(?::(\d{2}))?(?:\s*(?:-|~|–|—|－)\s*\d{1,2}(?::\d{2})?)?\s*$/);
     if (!match) return null;
     const hour = Number(match[1]);
     const minute = Number(match[2] || 0);
@@ -153,8 +153,10 @@
             if (parseShiftCell(matrix[r]?.[col],parseGridHour(matrix[r]?.[timeCol]),`${sheetName}:${r+1}:${col+1}`,weekday)) shiftCells += 1;
           }
         }
-        let score = header.weekdayCols.length * 12 + Math.max(0,bestTimeCount) * 2 + shiftCells * 3;
+        const recencyBonus = Math.min(12,Math.round((header.row / Math.max(1,matrix.length-1)) * 12));
+        let score = header.weekdayCols.length * 12 + Math.max(0,bestTimeCount) * 2 + shiftCells * 3 + recencyBonus;
         const reasons = [`요일 ${header.weekdayCols.length}개`, `시간축 ${Math.max(0,bestTimeCount)}개`, `근무셀 ${shiftCells}개`];
+        if (recencyBonus > 0) reasons.push(`하단 수정본 +${recencyBonus}`);
         if (NEGATIVE_SHEET.test(sheetName)) { score -= 45; reasons.push('비근무표 시트명 감점'); }
         const maxCol = Math.max(timeCol,...header.weekdayCols.map((item) => item.col));
         regions.push({
@@ -171,7 +173,7 @@
         });
       }
     }
-    return regions.sort((a,b) => b.score-a.score || a.sheetName.localeCompare(b.sheetName));
+    return regions.sort((a,b) => b.score-a.score || b.headerRow-a.headerRow || a.sheetName.localeCompare(b.sheetName));
   }
 
   function parseScheduleRegion(workbook, XLSX, region) {
