@@ -202,9 +202,9 @@ async function handleScheduleImportFile(file) {
   }
   if (['png','jpg','jpeg','webp'].includes(ext)) {
     scheduleImportState.sourceType='image';
-    const imageDataUrl=await readImageAsDataUrl(file);
+    const [imageDataUrl,buffer]=await Promise.all([readImageAsDataUrl(file),file.arrayBuffer()]);
+    scheduleImportState.sourceFingerprint=await ScheduleImportCore.fingerprintArrayBuffer(buffer);
     const result=await api.analyzeScheduleImage(session.token,{imageDataUrl,mimeType:file.type,targetMonth:scheduleImportState.targetMonth,effectiveDate:clampEffectiveDate(scheduleImportState.effectiveDate)});
-    scheduleImportState.sourceFingerprint='image';
     scheduleImportState.shifts=result?.rows || [];
     scheduleImportState.authoritative=result?.authoritative===true;
     scheduleImportState.regions=result?.regions || [];
