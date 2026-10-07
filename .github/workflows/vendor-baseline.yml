@@ -1,0 +1,38 @@
+name: vendor runtime baseline
+
+on:
+  push:
+    branches: [chore/production-hardening]
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Vendor current runtime baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f baseline/index.html ]; then
+            echo "baseline already vendored"
+            exit 0
+          fi
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run build
+          mkdir -p baseline/icons
+          cp dist/index.html baseline/index.html
+          for f in             styles-base-a.css styles-base-b.css styles-panels-a.css styles-panels-b.css             styles-checklist.css domain.js api.js core.js staff.js admin-home.js             admin-schedule.js admin-task.js admin-checklist.js admin-correction.js             boot.js manifest.webmanifest; do
+            cp "dist/$f" "baseline/$f"
+          done
+          cp dist/icons/icon.svg baseline/icons/icon.svg
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add baseline
+          git commit -m "build: vendor runtime baseline"
+          git push
