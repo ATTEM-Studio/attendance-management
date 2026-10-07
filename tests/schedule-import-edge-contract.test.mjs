@@ -25,14 +25,15 @@ test('edge function uses custom app session auth and admin-only guard before act
   assert.match(edge,/session\.role\s*!==\s*['"]admin['"]/);
   assert.match(edge,/403/);
   const authIndex=edge.indexOf('session.role');
-  const actionIndex=edge.indexOf("action==='analyze_image'");
+  const actionIndex=edge.indexOf("action==='preview'");
   assert.ok(authIndex>=0 && actionIndex>authIndex,'admin guard must run before action dispatch');
 });
 
-test('edge exposes analyze_image preview apply and save_alias actions',async()=>{
+test('edge exposes Excel preview apply and save_alias actions only',async()=>{
   const {edge}=await sources();
-  for(const action of ['analyze_image','preview','apply','save_alias']) assert.match(edge,new RegExp(`action\\s*===\\s*['\"]${action}['\"]`));
-  assert.match(edge,/analyzeScheduleImage/);
+  for(const action of ['preview','apply','save_alias']) assert.match(edge,new RegExp(`action\\s*===\\s*['\"]${action}['\"]`));
+  assert.doesNotMatch(edge,/analyze_image|analyzeScheduleImage|OPENAI_API_KEY|vision-adapter/);
+  assert.match(edge,/sourceType!=='xlsx'/);
   assert.match(edge,/buildScheduleImportDiff/);
   assert.match(edge,/summarizeImportDiff/);
   assert.match(edge,/apply_schedule_import/);
@@ -72,16 +73,6 @@ test('apply is bound to the exact preview source fingerprint',async()=>{
   assert.match(helperSource,/source_fingerprint/);
   assert.match(helperSource,/run\.source_fingerprint\s*!==\s*source\.sourceFingerprint/);
   assert.match(helperSource,/미리보기와 적용 파일이 달라졌습니다/);
-});
-
-test('image action checks request before OpenAI and missing key fails clearly',async()=>{
-  const {edge}=await sources();
-  const block=edge.slice(edge.indexOf("action==='analyze_image'"),edge.indexOf("action==='preview'"));
-  assert.match(block,/validateImageRequest/);
-  assert.match(block,/OPENAI_API_KEY/);
-  assert.match(block,/503/);
-  assert.match(block,/OPENAI_SCHEDULE_VISION_MODEL/);
-  assert.match(block,/gpt-6-luna/);
 });
 
 test('alias save validates active employee before service-role upsert',async()=>{
