@@ -318,7 +318,12 @@ function bindScheduleImportSheet() {
   document.querySelectorAll?.('[data-import-alias]').forEach((select)=>{select.onchange=async()=>{const label=select.dataset.importAlias;const employeeId=select.value;if(!employeeId)return;scheduleImportState.aliases[label]=employeeId;try{await api.saveScheduleImportAlias(session.token,{label,employeeId});}catch(error){console.warn('Alias save skipped:',error);}rematchScheduleImportRows();reopenScheduleImport();};});
   const preview=document.querySelector?.('#scheduleImportPreview');
   if(preview) preview.onclick=async()=>{setPending?.(preview,true,'비교 중');try{await requestScheduleImportPreview();reopenScheduleImport();}catch(error){toastMsg?.(error.message);}finally{if(preview?.isConnected)setPending?.(preview,false);}};
-  document.querySelectorAll?.('[data-import-preview-date]').forEach((button)=>{button.onclick=()=>{scheduleImportState.previewSelectedDate=button.dataset.importPreviewDate||'';reopenScheduleImport();};});
+  document.querySelectorAll?.('[data-import-preview-date]').forEach((button)=>{button.onclick=()=>{
+    scheduleImportState.previewSelectedDate=button.dataset.importPreviewDate||'';
+    document.querySelectorAll?.('[data-import-preview-date]').forEach((cell)=>cell.classList?.toggle('is-selected',cell.dataset.importPreviewDate===scheduleImportState.previewSelectedDate));
+    const detail=document.querySelector?.('#scheduleImportSelectedDetail');
+    if(detail) detail.innerHTML=importSelectedDateDetail(scheduleImportState.preview,scheduleImportState.previewSelectedDate);
+  };});
   const apply=document.querySelector?.('#scheduleImportApply');
   if(apply) apply.onclick=async()=>{setPending?.(apply,true,'적용 중');try{const result=await applyScheduleImportChanges();await load(scheduleImportState.targetMonth);renderAdmin();dismissLayer?.(document.querySelector?.('.sheet-backdrop'));toastMsg?.(`근무표를 적용했습니다. ${Number(result?.summary?.add||0)+Number(result?.summary?.update||0)}건 반영`);}catch(error){toastMsg?.(error.message);}finally{if(apply?.isConnected)setPending?.(apply,false);}};
 }
