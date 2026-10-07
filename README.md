@@ -53,11 +53,12 @@ npm run build
 
 빌드 결과는 `dist/`에 생성됩니다.
 
-현재 빌드는 검증된 v27 immutable deployment를 baseline으로 받아 v28 관리자 presentation layer와 범용 브랜딩 처리를 적용합니다. 출퇴근 상태 머신, 추가근무, 체크리스트 생성 등 핵심 비즈니스 로직은 변경하지 않습니다.
+현재 빌드는 저장소의 `baseline/`에 보존한 검증된 런타임 스냅샷을 기반으로 v28 관리자 presentation layer와 범용 브랜딩 처리를 적용합니다. 외부 Vercel 배포본에 의존하지 않으므로 GitHub 저장소만으로 재현 가능한 빌드가 가능합니다. 출퇴근 상태 머신, 추가근무, 체크리스트 생성 등 핵심 비즈니스 로직은 변경하지 않습니다.
 
 ## Main files
 
-- `build.mjs` — v27 baseline을 가져와 범용 v28 dist를 생성
+- `baseline/` — 검증된 런타임 원본 스냅샷
+- `build.mjs` — 로컬 baseline에서 범용 v28 dist를 생성
 - `admin-redesign.js` — 관리자 Today / Work / Operations UI 및 interaction
 - `admin-date-tools.js` — 선택 날짜 근태 조회·수정 및 빠른 근무표 편집
 - `schedule-import-core.js` — Excel 근무표 후보 탐지, 시간 정규화, 직원 매칭
