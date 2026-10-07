@@ -31,8 +31,9 @@ test('responsive design provides mobile bottom nav and desktop rail', () => {
   assert.ok(css.lastIndexOf('@media(min-width:1024px){.admin-mobile-nav{display:none}}') > css.lastIndexOf('.admin-mobile-nav{display:grid}'));
 });
 
-test('build is pinned to immutable v27 and produces v28 cache', () => {
-  assert.ok(build.includes('attendance-management-dcpp95jnz-choi18.vercel.app'));
+test('build uses vendored local baseline and produces v28 cache', () => {
+  assert.ok(build.includes("new URL('./baseline/', import.meta.url)"));
+  assert.equal(build.includes('attendance-management-dcpp95jnz-choi18.vercel.app'), false);
   assert.ok(build.includes("attendance-management-v28"));
   assert.ok(build.includes('/styles-admin-redesign.css'));
   assert.ok(build.includes('/admin-redesign.js'));

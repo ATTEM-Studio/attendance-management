@@ -1,0 +1,11 @@
+.stale-attendance-card{display:grid;gap:12px}
+.stale-attendance-card.is-danger{border-color:rgba(255,59,48,.18)}
+.stale-attendance-copy{margin:0;color:var(--text-secondary,#667085);font-size:13px;line-height:1.55}
+.stale-attendance-open{width:100%}
+.admin-stale-retry{min-height:42px;border:0;border-radius:14px;background:rgba(0,122,255,.08);font:inherit;font-weight:700;cursor:pointer}
+.stale-attendance-list{display:grid;gap:8px}
+.stale-attendance-row{width:100%;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;text-align:left;border:0;border-radius:16px;padding:12px;background:rgba(127,127,127,.07);font:inherit;cursor:pointer}
+.stale-attendance-row>span:nth-child(2){display:grid;gap:3px;min-width:0}
+.stale-attendance-row b{font-size:14px}
+.stale-attendance-row small,.stale-attendance-row em{font-size:12px;color:var(--text-secondary,#667085);font-style:normal}
+.stale-attendance-row em{color:var(--text-tertiary,#98a2b3)}
