@@ -201,8 +201,7 @@ function importPreviewStep(model) {
   const summary=preview.summary || emptyImportSummary();
   const actionable=summary.add+summary.update+summary.remove;
   const changes=importPreviewChanges(preview);
-  const firstDate=changes.map((row)=>String(row.workDate||'')).sort()[0] || '';
-  if (!model.previewSelectedDate || !changes.some((row)=>row.workDate===model.previewSelectedDate)) model.previewSelectedDate=firstDate;
+  if (model.previewSelectedDate && !changes.some((row)=>row.workDate===model.previewSelectedDate)) model.previewSelectedDate='';
   return '<section class="schedule-import-stage"><div class="schedule-import-heading"><span>변경사항 확인</span><h3>캘린더로 한눈에 확인하세요.</h3><p>전체 목록을 내리지 않고 날짜를 눌러 그날 변경만 확인할 수 있습니다.</p></div>'
     +'<div class="schedule-import-summary"><div><b>'+summary.add+'</b><span>신규</span></div><div><b>'+summary.update+'</b><span>변경</span></div><div><b>'+summary.remove+'</b><span>삭제</span></div><div><b>'+summary.protected+'</b><span>보호</span></div><div><b>'+summary.needs_review+'</b><span>확인 필요</span></div></div>'
     +(changes.length?importPreviewCalendar(preview,model.targetMonth,model.previewSelectedDate):'<div class="schedule-import-empty">변경할 일정이 없습니다.</div>')
@@ -295,8 +294,7 @@ async function requestScheduleImportPreview() {
     targetMonth:scheduleImportState.targetMonth,effectiveDate:clampEffectiveDate(scheduleImportState.effectiveDate),authoritative:scheduleImportState.authoritative,shifts:scheduleImportState.shifts,
   });
   scheduleImportState.preview=buildImportPreviewModel({...result,sourceType:scheduleImportState.sourceType,targetMonth:scheduleImportState.targetMonth,effectiveDate:scheduleImportState.effectiveDate,authoritative:scheduleImportState.authoritative,diff:result?.diff||[]});
-  const firstPreviewDate=importPreviewChanges(scheduleImportState.preview).map((row)=>String(row.workDate||'')).sort()[0] || '';
-  scheduleImportState.previewSelectedDate=firstPreviewDate;
+  scheduleImportState.previewSelectedDate='';
   scheduleImportState.runId=result?.runId || '';
   scheduleImportState.step=4;
 }
