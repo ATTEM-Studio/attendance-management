@@ -1,0 +1,1 @@
+Deno.serve(() => new Response(JSON.stringify({ error: '관리자 알림 기능은 사용하지 않습니다.' }), { status: 410, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' } }));
