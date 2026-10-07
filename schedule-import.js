@@ -126,7 +126,7 @@ function importDiffRow(row) {
 }
 
 function importPreviewChanges(preview) {
-  return (preview?.diff||[]).filter((row)=>row?.status && row.status!=='unchanged' && /^\\d{4}-\\d{2}-\\d{2}$/.test(String(row.workDate||'')));
+  return (preview?.diff||[]).filter((row)=>row?.status && row.status!=='unchanged' && /^\d{4}-\d{2}-\d{2}$/.test(String(row.workDate||'')));
 }
 
 function importPreviewByDate(preview) {
