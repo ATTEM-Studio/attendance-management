@@ -70,6 +70,7 @@ function defaultScheduleImportState() {
     employeeMatches:[],
     aliases:{},
     preview:null,
+    previewSelectedDate:'',
     busy:false,
     error:'',
   };
@@ -111,30 +112,107 @@ function importEmployeeStep(model) {
     <button class="action-button primary-action" id="scheduleImportPreview" ${review.length?'disabled':''}><span>변경사항 확인</span></button></section>`;
 }
 
+
 const IMPORT_STATUS_COPY={add:'신규',update:'변경',remove:'삭제',protected:'보호',needs_review:'확인 필요',unchanged:'변경 없음'};
+const IMPORT_STATUS_PRIORITY=['needs_review','protected','remove','update','add'];
+
 function importDiffRow(row) {
   const employee=row.employeeName || row.employeeLabel || '';
   const date=row.workDate || '';
-  const before=Array.isArray(row.before)?row.before.map((item)=>`${item.scheduledStart}~${item.scheduledEnd}`).join(', '):'';
-  const after=Array.isArray(row.after)?row.after.map((item)=>`${item.scheduledStart}~${item.scheduledEnd}`).join(', '):'';
-  const detail=row.detail || (row.status==='add'?after:row.status==='remove'?before:before&&after?`${before} → ${after}`:after||before);
-  return `<div class="schedule-import-diff is-${esc(row.status)}"><em>${esc(IMPORT_STATUS_COPY[row.status]||row.status)}</em><span><b>${esc(date)} ${esc(employee)}</b><small>${esc(detail || '')}</small></span></div>`;
+  const before=Array.isArray(row.before)?row.before.map((item)=>item.scheduledStart+'~'+item.scheduledEnd).join(', '):'';
+  const after=Array.isArray(row.after)?row.after.map((item)=>item.scheduledStart+'~'+item.scheduledEnd).join(', '):'';
+  const detail=row.detail || (row.status==='add'?after:row.status==='remove'?before:before&&after?before+' → '+after:after||before);
+  return '<div class="schedule-import-diff is-'+esc(row.status)+'"><em>'+esc(IMPORT_STATUS_COPY[row.status]||row.status)+'</em><span><b>'+esc(date)+' '+esc(employee)+'</b><small>'+esc(detail || '')+'</small></span></div>';
+}
+
+function importPreviewChanges(preview) {
+  return (preview?.diff||[]).filter((row)=>row?.status && row.status!=='unchanged' && /^\d{4}-\d{2}-\d{2}$/.test(String(row.workDate||'')));
+}
+
+function importPreviewByDate(preview) {
+  const grouped=new Map();
+  for (const row of importPreviewChanges(preview)) {
+    const date=String(row.workDate);
+    if (!grouped.has(date)) grouped.set(date,[]);
+    grouped.get(date).push(row);
+  }
+  return grouped;
+}
+
+function importCalendarMonthMeta(targetMonth) {
+  const parts=String(targetMonth||'').split('-').map(Number);
+  const year=parts[0], monthNumber=parts[1];
+  if (!year || !monthNumber) return {year:0,month:0,days:0,firstWeekday:0};
+  return {
+    year,
+    month:monthNumber,
+    days:new Date(Date.UTC(year,monthNumber,0)).getUTCDate(),
+    firstWeekday:new Date(Date.UTC(year,monthNumber-1,1)).getUTCDay(),
+  };
+}
+
+function importCalendarCellStatus(rows) {
+  for (const status of IMPORT_STATUS_PRIORITY) {
+    if (rows.some((row)=>row.status===status)) return status;
+  }
+  return rows[0]?.status || '';
+}
+
+function importCalendarMiniRows(rows) {
+  return rows.slice(0,2).map((row)=>{
+    const employee=row.employeeName || row.employeeLabel || '직원';
+    const after=Array.isArray(row.after)&&row.after.length?row.after[0]:null;
+    const before=Array.isArray(row.before)&&row.before.length?row.before[0]:null;
+    const shift=after||before;
+    const time=shift?.scheduledStart&&shift?.scheduledEnd?shift.scheduledStart+'–'+shift.scheduledEnd:'';
+    return '<span class="schedule-import-calendar-mini is-'+esc(row.status)+'"><b>'+esc(employee)+'</b>'+(time?'<small>'+esc(time)+'</small>':'')+'</span>';
+  }).join('');
+}
+
+function importPreviewCalendar(preview,targetMonth,selectedDate) {
+  const grouped=importPreviewByDate(preview);
+  const meta=importCalendarMonthMeta(targetMonth);
+  if (!meta.days) return '<div class="schedule-import-empty">달력을 표시할 수 없습니다.</div>';
+  const weekday=['일','월','화','수','목','금','토'].map((day)=>'<span>'+day+'</span>').join('');
+  const cells=[];
+  for(let blank=0;blank<meta.firstWeekday;blank++) cells.push('<span class="schedule-import-calendar-day is-blank" aria-hidden="true"></span>');
+  for(let day=1;day<=meta.days;day++){
+    const date=meta.year+'-'+String(meta.month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    const rows=grouped.get(date)||[];
+    const status=importCalendarCellStatus(rows);
+    const isSelected=date===selectedDate;
+    const classes=['schedule-import-calendar-day',rows.length?'has-changes':'is-empty',status?'is-'+status:'',isSelected?'is-selected':''].filter(Boolean).join(' ');
+    const count=rows.length?'<span class="schedule-import-calendar-count">'+rows.length+'건</span>':'';
+    const mini=rows.length?'<span class="schedule-import-calendar-mini-list">'+importCalendarMiniRows(rows)+(rows.length>2?'<small class="schedule-import-calendar-more">+'+(rows.length-2)+'</small>':'')+'</span>':'';
+    cells.push('<button type="button" class="'+classes+'" data-import-preview-date="'+date+'" '+(rows.length?'':'disabled')+'><span class="schedule-import-calendar-date">'+day+'</span>'+count+mini+'</button>');
+  }
+  return '<div class="schedule-import-calendar-wrap"><div class="schedule-import-calendar-title"><b>'+meta.year+'년 '+meta.month+'월</b><span>변경 있는 날짜를 눌러 상세 확인</span></div><div class="schedule-import-calendar-weekdays">'+weekday+'</div><div class="schedule-import-calendar">'+cells.join('')+'</div></div>';
+}
+
+function importSelectedDateDetail(preview,selectedDate) {
+  const grouped=importPreviewByDate(preview);
+  const rows=grouped.get(selectedDate)||[];
+  if (!selectedDate || !rows.length) return '<div class="schedule-import-calendar-hint">변경이 있는 날짜를 선택하면 그날 일정만 표시됩니다.</div>';
+  return '<div class="schedule-import-selected"><div class="schedule-import-selected-heading"><b>'+esc(selectedDate)+'</b><span>'+rows.length+'건</span></div><div class="schedule-import-diffs">'+rows.map(importDiffRow).join('')+'</div></div>';
 }
 
 function importPreviewStep(model) {
   const preview=model.preview || buildImportPreviewModel({sourceType:model.sourceType,targetMonth:model.targetMonth,effectiveDate:model.effectiveDate,diff:[]});
-  const s=preview.summary || emptyImportSummary();
-  const actionable=s.add+s.update+s.remove;
-  return `<section class="schedule-import-stage"><div class="schedule-import-heading"><span>변경사항 확인</span><h3>적용 전에 달라지는 일정만 확인하세요.</h3></div>
-    <div class="schedule-import-summary"><div><b>${s.add}</b><span>신규</span></div><div><b>${s.update}</b><span>변경</span></div><div><b>${s.remove}</b><span>삭제</span></div><div><b>${s.protected}</b><span>보호</span></div><div><b>${s.needs_review}</b><span>확인 필요</span></div></div>
-    <div class="schedule-import-diffs">${(preview.diff||[]).map(importDiffRow).join('') || '<div class="schedule-import-empty">변경할 일정이 없습니다.</div>'}</div>
-    <button class="action-button primary-action" id="scheduleImportApply" ${!actionable||s.needs_review?'disabled':''}><span>변경사항 적용</span></button></section>`;
+  const summary=preview.summary || emptyImportSummary();
+  const actionable=summary.add+summary.update+summary.remove;
+  const changes=importPreviewChanges(preview);
+  if (model.previewSelectedDate && !changes.some((row)=>row.workDate===model.previewSelectedDate)) model.previewSelectedDate='';
+  return '<section class="schedule-import-stage"><div class="schedule-import-heading"><span>변경사항 확인</span><h3>캘린더로 한눈에 확인하세요.</h3><p>전체 목록을 내리지 않고 날짜를 눌러 그날 변경만 확인할 수 있습니다.</p></div>'
+    +'<div class="schedule-import-summary"><div><b>'+summary.add+'</b><span>신규</span></div><div><b>'+summary.update+'</b><span>변경</span></div><div><b>'+summary.remove+'</b><span>삭제</span></div><div><b>'+summary.protected+'</b><span>보호</span></div><div><b>'+summary.needs_review+'</b><span>확인 필요</span></div></div>'
+    +(changes.length?importPreviewCalendar(preview,model.targetMonth,model.previewSelectedDate):'<div class="schedule-import-empty">변경할 일정이 없습니다.</div>')
+    +'<div id="scheduleImportSelectedDetail">'+importSelectedDateDetail(preview,model.previewSelectedDate)+'</div>'
+    +'<div class="schedule-import-apply-bar"><span>'+(actionable?'적용 예정 '+actionable+'건':'적용할 변경 없음')+'</span><button class="action-button primary-action" id="scheduleImportApply" '+(!actionable||summary.needs_review?'disabled':'')+'><span>변경사항 적용</span></button></div></section>';
 }
 
 function renderScheduleImportStep(model=scheduleImportState) {
   if (!model) model=defaultScheduleImportState();
   const body=model.step===2?importCandidateStep(model):model.step===3?importEmployeeStep(model):model.step===4?importPreviewStep(model):importFileStep(model);
-  return `<div class="schedule-import"><div class="sheet-heading"><div><span class="sheet-kicker">근무표 가져오기</span><h2>${esc(importStepLabel(model.step))}</h2><p>기존 Excel·사진 시간표를 앱 일정으로 변환합니다.</p></div></div>${importStepper(model.step)}${body}</div>`;
+  return `<div class="schedule-import"><div class="sheet-heading"><div><span class="sheet-kicker">근무표 가져오기</span><h2>${esc(importStepLabel(model.step))}</h2><p>기존 Excel 근무표를 앱 일정으로 변환합니다.</p></div></div>${importStepper(model.step)}${body}</div>`;
 }
 
 function reopenScheduleImport() {
@@ -216,6 +294,7 @@ async function requestScheduleImportPreview() {
     targetMonth:scheduleImportState.targetMonth,effectiveDate:clampEffectiveDate(scheduleImportState.effectiveDate),authoritative:scheduleImportState.authoritative,shifts:scheduleImportState.shifts,
   });
   scheduleImportState.preview=buildImportPreviewModel({...result,sourceType:scheduleImportState.sourceType,targetMonth:scheduleImportState.targetMonth,effectiveDate:scheduleImportState.effectiveDate,authoritative:scheduleImportState.authoritative,diff:result?.diff||[]});
+  scheduleImportState.previewSelectedDate='';
   scheduleImportState.runId=result?.runId || '';
   scheduleImportState.step=4;
 }
@@ -237,6 +316,12 @@ function bindScheduleImportSheet() {
   document.querySelectorAll?.('[data-import-alias]').forEach((select)=>{select.onchange=async()=>{const label=select.dataset.importAlias;const employeeId=select.value;if(!employeeId)return;scheduleImportState.aliases[label]=employeeId;try{await api.saveScheduleImportAlias(session.token,{label,employeeId});}catch(error){console.warn('Alias save skipped:',error);}rematchScheduleImportRows();reopenScheduleImport();};});
   const preview=document.querySelector?.('#scheduleImportPreview');
   if(preview) preview.onclick=async()=>{setPending?.(preview,true,'비교 중');try{await requestScheduleImportPreview();reopenScheduleImport();}catch(error){toastMsg?.(error.message);}finally{if(preview?.isConnected)setPending?.(preview,false);}};
+  document.querySelectorAll?.('[data-import-preview-date]').forEach((button)=>{button.onclick=()=>{
+    scheduleImportState.previewSelectedDate=button.dataset.importPreviewDate||'';
+    document.querySelectorAll?.('[data-import-preview-date]').forEach((cell)=>cell.classList?.toggle('is-selected',cell.dataset.importPreviewDate===scheduleImportState.previewSelectedDate));
+    const detail=document.querySelector?.('#scheduleImportSelectedDetail');
+    if(detail) detail.innerHTML=importSelectedDateDetail(scheduleImportState.preview,scheduleImportState.previewSelectedDate);
+  };});
   const apply=document.querySelector?.('#scheduleImportApply');
   if(apply) apply.onclick=async()=>{setPending?.(apply,true,'적용 중');try{const result=await applyScheduleImportChanges();await load(scheduleImportState.targetMonth);renderAdmin();dismissLayer?.(document.querySelector?.('.sheet-backdrop'));toastMsg?.(`근무표를 적용했습니다. ${Number(result?.summary?.add||0)+Number(result?.summary?.update||0)}건 반영`);}catch(error){toastMsg?.(error.message);}finally{if(apply?.isConnected)setPending?.(apply,false);}};
 }

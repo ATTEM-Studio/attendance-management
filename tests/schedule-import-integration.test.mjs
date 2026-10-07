@@ -23,7 +23,7 @@ test('unresolved employee rows expose a selector and block preview until resolve
 
 test('preview renders all safety categories and blocks apply while review remains',()=>{
   for(const label of ['신규','변경','삭제','보호','확인 필요']) assert.match(source,new RegExp(label));
-  assert.match(source,/s\.needs_review\?'disabled':''/);
+  assert.match(source,/summary\.needs_review\?'disabled':''/);
   assert.match(source,/protected/);
   assert.match(source,/needs_review/);
 });

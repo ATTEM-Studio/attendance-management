@@ -53,6 +53,34 @@ test('schedule import UI exposes a four-stage wizard and API methods', async () 
   assert.doesNotMatch(source,/\.png|\.jpg|\.jpeg|\.webp|analyzeScheduleImage/);
 });
 
+test('final preview renders a monthly calendar and only the selected date details', async () => {
+  const {source,context}=await loadUi();
+  assert.equal(typeof context.importPreviewCalendar,'function');
+  assert.equal(typeof context.importSelectedDateDetail,'function');
+  assert.match(source,/data-import-preview-date/);
+  assert.match(source,/캘린더로 한눈에 확인하세요/);
+  assert.doesNotMatch(source,/\(preview\.diff\|\|\[\]\)\.map\(importDiffRow\)/);
+  const preview=context.buildImportPreviewModel({
+    sourceType:'xlsx',
+    targetMonth:'2026-10',
+    effectiveDate:'2026-10-07',
+    today:'2026-10-07',
+    diff:[
+      {status:'add',workDate:'2026-10-07',employeeName:'김나현',after:[{scheduledStart:'13:00',scheduledEnd:'19:00'}]},
+      {status:'add',workDate:'2026-10-07',employeeName:'장세영',after:[{scheduledStart:'08:00',scheduledEnd:'14:00'}]},
+      {status:'update',workDate:'2026-10-08',employeeName:'박시현',before:[{scheduledStart:'10:00',scheduledEnd:'16:00'}],after:[{scheduledStart:'11:00',scheduledEnd:'17:00'}]},
+    ],
+  });
+  const calendar=context.importPreviewCalendar(preview,'2026-10','2026-10-07');
+  const detail=context.importSelectedDateDetail(preview,'2026-10-07');
+  assert.match(calendar,/2026년 10월/);
+  assert.match(calendar,/data-import-preview-date="2026-10-07"/);
+  assert.match(calendar,/2건/);
+  assert.match(detail,/김나현/);
+  assert.match(detail,/장세영/);
+  assert.doesNotMatch(detail,/박시현/);
+});
+
 test('preview model enforces KST effective date floor and exposes all diff counts', async () => {
   const {context}=await loadUi();
   const model=context.buildImportPreviewModel({
