@@ -92,11 +92,17 @@ if (!index.includes('/styles-staff-calendar.css')) {
 if (!index.includes('/styles-schedule-import.css')) {
   index = index.replace('</head>', '<link rel="stylesheet" href="/styles-schedule-import.css"></head>');
 }
+if (!index.includes('/styles-stale-attendance.css')) {
+  index = index.replace('</head>', '<link rel="stylesheet" href="/styles-stale-attendance.css"></head>');
+}
 if (!index.includes('/admin-redesign.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-redesign.js"></script><script src="/boot.js"></script>');
 }
 if (!index.includes('/admin-date-tools.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-date-tools.js"></script><script src="/boot.js"></script>');
+}
+if (!index.includes('/admin-stale-attendance.js')) {
+  index = index.replace('<script src="/boot.js"></script>', '<script src="/admin-stale-attendance.js"></script><script src="/boot.js"></script>');
 }
 if (!index.includes('/checklist-presets-data.js')) {
   index = index.replace('<script src="/boot.js"></script>', '<script src="/checklist-presets-data.js"></script><script src="/boot.js"></script>');
@@ -143,6 +149,8 @@ await writeOut('styles-staff-calendar.css', await readFile(new URL('./styles-sta
 await writeOut('schedule-import-core.js', await readFile(new URL('./schedule-import-core.js', import.meta.url), 'utf8'));
 await writeOut('schedule-import.js', await readFile(new URL('./schedule-import.js', import.meta.url), 'utf8'));
 await writeOut('styles-schedule-import.css', await readFile(new URL('./styles-schedule-import.css', import.meta.url), 'utf8'));
+await writeOut('admin-stale-attendance.js', await readFile(new URL('./admin-stale-attendance.js', import.meta.url), 'utf8'));
+await writeOut('styles-stale-attendance.css', await readFile(new URL('./styles-stale-attendance.css', import.meta.url), 'utf8'));
 await writeOut('vendor/xlsx.full.min.js', await readFile(new URL('./node_modules/xlsx/dist/xlsx.full.min.js', import.meta.url), 'utf8'));
 
 const shell = [
@@ -162,8 +170,10 @@ const shell = [
   '/schedule-import-core.js',
   '/schedule-import.js',
   '/styles-schedule-import.css',
+  '/admin-stale-attendance.js',
+  '/styles-stale-attendance.css',
 ];
-const sw = `const CACHE='attendance-management-v28-schedule-import-v1';const SHELL=${JSON.stringify(shell)};self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request)))})\n`;
+const sw = `const CACHE='attendance-management-v28-hardening-v1';const SHELL=${JSON.stringify(shell)};self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request)))})\n`;
 await writeOut('sw.js', sw);
 
-console.log('Built generic Attendance Management v28 with schedule import into dist/');
+console.log('Built generic Attendance Management v28 hardening build into dist/');
