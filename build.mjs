@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const BASE = 'https://attendance-management-dcpp95jnz-choi18.vercel.app';
+const BASE_DIR = new URL('./baseline/', import.meta.url);
 const OUT = new URL('./dist/', import.meta.url);
 const PRODUCT_NAME = '근태관리';
 const PRODUCT_DESCRIPTION = '직원 근무 일정과 출퇴근을 관리하는 근태관리 시스템';
@@ -45,11 +45,9 @@ function neutralizeRuntimeStoreNameReferences(content) {
     .replaceAll("state?.storeName || '근태관리'", 'displayStoreName()');
 }
 
-async function fetchText(route = '') {
-  const url = route ? `${BASE}/${route}` : `${BASE}/`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
-  return response.text();
+async function readBaseline(route = '') {
+  const file = route || 'index.html';
+  return readFile(new URL(file, BASE_DIR), 'utf8');
 }
 
 async function writeOut(file, content) {
@@ -62,7 +60,7 @@ await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 
 for (const file of BASE_FILES) {
-  let content = neutralizeLegacyBranding(await fetchText(file));
+  let content = neutralizeLegacyBranding(await readBaseline(file));
   if (file.endsWith('.js')) content = neutralizeRuntimeStoreNameReferences(content);
   if (file === 'manifest.webmanifest') {
     const manifest = JSON.parse(content);
@@ -74,7 +72,7 @@ for (const file of BASE_FILES) {
   await writeOut(file, content);
 }
 
-let index = neutralizeLegacyBranding(await fetchText());
+let index = neutralizeLegacyBranding(await readBaseline());
 index = index
   .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${PRODUCT_DESCRIPTION}">`)
   .replace(/<meta name="apple-mobile-web-app-title" content="[^"]*">/, `<meta name="apple-mobile-web-app-title" content="${PRODUCT_NAME}">`)
