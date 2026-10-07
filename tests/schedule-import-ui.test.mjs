@@ -47,12 +47,10 @@ test('schedule import UI exposes a four-stage wizard and API methods', async () 
   assert.equal(typeof context.buildImportPreviewModel,'function');
   assert.equal(typeof context.api.previewScheduleImport,'function');
   assert.equal(typeof context.api.applyScheduleImport,'function');
-  assert.equal(typeof context.api.analyzeScheduleImage,'function');
   assert.equal(typeof context.api.saveScheduleImportAlias,'function');
   for (const copy of ['파일 선택','근무표 선택','직원 확인','변경사항 확인','변경사항 적용']) assert.match(source,new RegExp(copy));
   assert.match(source,/\.xlsx/);
-  assert.match(source,/\.png/);
-  assert.match(source,/\.webp/);
+  assert.doesNotMatch(source,/\.png|\.jpg|\.jpeg|\.webp|analyzeScheduleImage/);
 });
 
 test('preview model enforces KST effective date floor and exposes all diff counts', async () => {

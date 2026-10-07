@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { buildScheduleImportDiff, summarizeImportDiff, validateImportPayload } from './import-core.mjs';
-import { analyzeScheduleImage, validateImageRequest } from './vision-adapter.mjs';
 
 const H={
   'Access-Control-Allow-Origin':'*',
@@ -47,7 +46,7 @@ async function requireAdmin(req:Request){
 
 function normalizeSource(body:any){
   const sourceType=text(body?.sourceType);
-  if(!['xlsx','image'].includes(sourceType)) throw new Error('가져오기 파일 형식을 확인해 주세요.');
+  if(sourceType!=='xlsx') throw new Error('Excel .xlsx 근무표만 가져올 수 있습니다.');
   const targetMonth=text(body?.targetMonth);
   const effectiveDate=text(body?.effectiveDate);
   const shifts=Array.isArray(body?.shifts)?body.shifts:[];
@@ -213,23 +212,6 @@ Deno.serve(async(req:Request)=>{
   const action=text(body?.action);
 
   try{
-    if(action==='analyze_image'){
-      const checked=validateImageRequest({imageDataUrl:body?.imageDataUrl,mimeType:body?.mimeType});
-      if(!checked.ok) return out({error:checked.error},400);
-      const apiKey=Deno.env.get('OPENAI_API_KEY')||'';
-      if(!apiKey) return out({error:'이미지 분석 설정이 필요합니다.'},503);
-      const model=Deno.env.get('OPENAI_SCHEDULE_VISION_MODEL')||'gpt-6-luna';
-      const result=await analyzeScheduleImage({
-        imageDataUrl:body.imageDataUrl,
-        mimeType:body.mimeType,
-        targetMonth:text(body.targetMonth),
-        effectiveDate:text(body.effectiveDate),
-        apiKey,
-        model,
-      });
-      return out({ok:true,...result});
-    }
-
     if(action==='preview'){
       const source=normalizeSource(body);
       return out({ok:true,...await previewScheduleImport(source)});

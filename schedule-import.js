@@ -5,7 +5,6 @@ const SCHEDULE_IMPORT_TYPES = ['add','update','remove','protected','needs_review
 if (typeof api !== 'undefined' && typeof externalRequest === 'function') {
   api.previewScheduleImport = (token,payload) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'preview',...payload}});
   api.applyScheduleImport = (token,payload) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'apply',...payload}});
-  api.analyzeScheduleImage = (token,payload) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'analyze_image',...payload}});
   api.saveScheduleImportAlias = (token,payload) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'save_alias',...payload}});
   api.listScheduleImportAliases = (token) => externalRequest(SCHEDULE_IMPORT_API,{method:'POST',token,body:{action:'aliases'}});
 }
@@ -85,15 +84,15 @@ function importStepper(current) {
 }
 
 function importFileStep(model) {
-  return `<section class="schedule-import-stage"><div class="schedule-import-intro"><span>기존 방식 그대로</span><h3>엑셀이나 시간표 사진을 올려주세요.</h3><p>엑셀은 기기 안에서 읽고, 사진은 표 구조와 색칠된 시간 영역을 함께 분석합니다.</p></div>
-    <label class="schedule-import-dropzone" for="scheduleImportFile"><b>파일 선택</b><span>.xlsx · .png · .jpg · .jpeg · .webp</span><input id="scheduleImportFile" type="file" accept=".xlsx,.png,.jpg,.jpeg,.webp,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,image/webp"></label>
+  return `<section class="schedule-import-stage"><div class="schedule-import-intro"><span>Excel 전용</span><h3>엑셀 근무표 파일을 올려주세요.</h3><p>.xlsx 파일은 기기 안에서 직접 읽고, 원본 파일은 서버에 저장하지 않습니다.</p></div>
+    <label class="schedule-import-dropzone" for="scheduleImportFile"><b>Excel 파일 선택</b><span>.xlsx</span><input id="scheduleImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
     ${model.error?`<div class="schedule-import-error">${esc(model.error)}</div>`:''}</section>`;
 }
 
 function importCandidateStep(model) {
   const regionOptions=model.regions.map((region,index)=>`<button class="schedule-import-candidate ${region.id===model.candidateRegionId?'is-selected':''}" data-import-region="${esc(region.id)}"><span><b>${esc(region.sheetName || `근무표 ${index+1}`)}</b><small>${esc(region.range || '')} · 점수 ${Number(region.score||0)}</small></span>${index===0?'<em>추천</em>':''}</button>`).join('');
   return `<section class="schedule-import-stage"><div class="schedule-import-heading"><span>근무표 선택</span><h3>적용할 범위와 시작일을 확인하세요.</h3></div>
-    ${model.sourceType==='xlsx'?`<div class="schedule-import-candidates">${regionOptions || '<div class="schedule-import-empty">근무표 후보를 찾지 못했습니다.</div>'}</div>`:'<div class="schedule-import-notice">사진에서 인식된 근무표를 사용합니다.</div>'}
+    <div class="schedule-import-candidates">${regionOptions || '<div class="schedule-import-empty">근무표 후보를 찾지 못했습니다.</div>'}</div>
     <div class="schedule-import-fields"><label><span>대상 월</span><input id="scheduleImportMonth" type="month" value="${esc(model.targetMonth)}"></label><label><span>변경 적용 시작일</span><input id="scheduleImportEffective" type="date" min="${esc(scheduleImportToday())}" value="${esc(clampEffectiveDate(model.effectiveDate))}"></label></div>
     <p class="schedule-import-safety">적용 시작일 이전 일정과 실제 출퇴근이 발생한 일정은 자동으로 바꾸지 않습니다.</p>
     <button class="action-button primary-action" id="scheduleImportParse"><span>직원 확인으로 계속</span></button></section>`;
@@ -174,11 +173,6 @@ function rematchScheduleImportRows() {
   scheduleImportState.shifts=scheduleImportState.shifts.map((row)=>byLabel.has(row.employeeLabel)?{...row,employeeId:byLabel.get(row.employeeLabel)}:row);
 }
 
-async function readImageAsDataUrl(file) {
-  if (typeof FileReader === 'undefined') throw new Error('파일 읽기를 지원하지 않는 환경입니다.');
-  return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error||new Error('이미지를 읽지 못했습니다.'));reader.readAsDataURL(file);});
-}
-
 async function handleScheduleImportFile(file) {
   if (!file) return;
   const name=String(file.name||'');
@@ -186,48 +180,29 @@ async function handleScheduleImportFile(file) {
   scheduleImportState.file=file;
   scheduleImportState.sourceName=name;
   scheduleImportState.error='';
-  if (ext==='xlsx') {
-    if (typeof XLSX==='undefined' || !ScheduleImportCore) throw new Error('Excel 분석 모듈을 불러오지 못했습니다.');
-    const buffer=await file.arrayBuffer();
-    scheduleImportState.sourceType='xlsx';
-    scheduleImportState.sourceFingerprint=await ScheduleImportCore.fingerprintArrayBuffer(buffer);
-    scheduleImportState.workbook=XLSX.read(buffer,{type:'array',cellStyles:true,cellDates:true});
-    scheduleImportState.regions=ScheduleImportCore.detectScheduleRegions(scheduleImportState.workbook,XLSX);
-    if (!scheduleImportState.regions.length) throw new Error('근무표로 보이는 영역을 찾지 못했습니다.');
-    scheduleImportState.candidateRegionId=scheduleImportState.regions[0].id;
-    scheduleImportState.authoritative=scheduleImportState.regions[0].authoritative===true;
-    scheduleImportState.step=2;
-    reopenScheduleImport();
-    return;
-  }
-  if (['png','jpg','jpeg','webp'].includes(ext)) {
-    scheduleImportState.sourceType='image';
-    const [imageDataUrl,buffer]=await Promise.all([readImageAsDataUrl(file),file.arrayBuffer()]);
-    scheduleImportState.sourceFingerprint=await ScheduleImportCore.fingerprintArrayBuffer(buffer);
-    const result=await api.analyzeScheduleImage(session.token,{imageDataUrl,mimeType:file.type,targetMonth:scheduleImportState.targetMonth,effectiveDate:clampEffectiveDate(scheduleImportState.effectiveDate)});
-    scheduleImportState.shifts=result?.rows || [];
-    scheduleImportState.authoritative=result?.authoritative===true;
-    scheduleImportState.regions=result?.regions || [];
-    scheduleImportState.step=2;
-    reopenScheduleImport();
-    return;
-  }
-  throw new Error('지원 형식은 .xlsx, .png, .jpg, .jpeg, .webp 입니다.');
+  if (ext!=='xlsx') throw new Error('지원 형식은 .xlsx 입니다.');
+  if (typeof XLSX==='undefined' || !ScheduleImportCore) throw new Error('Excel 분석 모듈을 불러오지 못했습니다.');
+  const buffer=await file.arrayBuffer();
+  scheduleImportState.sourceType='xlsx';
+  scheduleImportState.sourceFingerprint=await ScheduleImportCore.fingerprintArrayBuffer(buffer);
+  scheduleImportState.workbook=XLSX.read(buffer,{type:'array',cellStyles:true,cellDates:true});
+  scheduleImportState.regions=ScheduleImportCore.detectScheduleRegions(scheduleImportState.workbook,XLSX);
+  if (!scheduleImportState.regions.length) throw new Error('근무표로 보이는 영역을 찾지 못했습니다.');
+  scheduleImportState.candidateRegionId=scheduleImportState.regions[0].id;
+  scheduleImportState.authoritative=scheduleImportState.regions[0].authoritative===true;
+  scheduleImportState.step=2;
+  reopenScheduleImport();
 }
 
 async function parseSelectedScheduleImportRegion() {
   scheduleImportState.targetMonth=document.querySelector?.('#scheduleImportMonth')?.value || scheduleImportState.targetMonth;
   scheduleImportState.effectiveDate=clampEffectiveDate(document.querySelector?.('#scheduleImportEffective')?.value || scheduleImportState.effectiveDate);
-  if (scheduleImportState.sourceType==='xlsx') {
-    const region=scheduleImportState.regions.find((item)=>item.id===scheduleImportState.candidateRegionId) || scheduleImportState.regions[0];
-    if (!region) throw new Error('근무표 영역을 선택해 주세요.');
-    scheduleImportState.authoritative=region.authoritative===true;
-    const weekly=ScheduleImportCore.parseScheduleRegion(scheduleImportState.workbook,XLSX,region);
-    scheduleImportState.parsedRows=weekly;
-    scheduleImportState.shifts=ScheduleImportCore.expandWeeklyPattern(weekly,scheduleImportState.targetMonth,scheduleImportState.effectiveDate);
-  } else {
-    scheduleImportState.shifts=(scheduleImportState.shifts||[]).filter((row)=>!row.workDate || row.workDate>=scheduleImportState.effectiveDate);
-  }
+  const region=scheduleImportState.regions.find((item)=>item.id===scheduleImportState.candidateRegionId) || scheduleImportState.regions[0];
+  if (!region) throw new Error('근무표 영역을 선택해 주세요.');
+  scheduleImportState.authoritative=region.authoritative===true;
+  const weekly=ScheduleImportCore.parseScheduleRegion(scheduleImportState.workbook,XLSX,region);
+  scheduleImportState.parsedRows=weekly;
+  scheduleImportState.shifts=ScheduleImportCore.expandWeeklyPattern(weekly,scheduleImportState.targetMonth,scheduleImportState.effectiveDate);
   await loadScheduleImportAliases();
   rematchScheduleImportRows();
   scheduleImportState.step=3;
