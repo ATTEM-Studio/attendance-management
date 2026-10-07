@@ -1,10 +1,15 @@
 /* Historical stale clock-out review for administrators */
-const STALE_ATTENDANCE_BASE='https://ndczsguqlwyiuqvsmvcb.supabase.co/functions/v1/attendance-stale-open';
 const staleAttendanceState={items:null,loading:false,error:'',loadedAt:0};
 
-if(typeof api!=='undefined'&&typeof externalRequest==='function'){
-  api.listStaleAttendance=(token)=>externalRequest(STALE_ATTENDANCE_BASE,{method:'POST',token,body:{action:'list'}});
-  api.resolveStaleAttendance=(token,payload)=>externalRequest(STALE_ATTENDANCE_BASE,{method:'POST',token,body:{action:'resolve',...payload}});
+function staleMonthOffset(base,offset){
+  const parts=String(base).split('-').map(Number);
+  const date=new Date(Date.UTC(parts[0],parts[1]-1-offset,1));
+  return date.getUTCFullYear()+'-'+String(date.getUTCMonth()+1).padStart(2,'0');
+}
+
+function staleAttendanceMonths(){
+  const base=currentMonth();
+  return [0,1,2].map((offset)=>staleMonthOffset(base,offset));
 }
 
 function staleAttendanceLabel(item){
@@ -14,14 +19,14 @@ function staleAttendanceLabel(item){
 
 function staleAttendanceCard(){
   if(staleAttendanceState.loading&&staleAttendanceState.items===null){
-    return '<section class="admin-side-card stale-attendance-card"><div class="admin-side-heading"><div><span>과거 미퇴근</span><h3>확인 중이에요</h3></div></div><div class="admin-muted-empty">이전 근무의 미퇴근 기록을 확인하고 있습니다.</div></section>';
+    return '<section class="admin-side-card stale-attendance-card"><div class="admin-side-heading"><div><span>과거 미퇴근</span><h3>확인 중이에요</h3></div></div><div class="admin-muted-empty">최근 3개월의 미퇴근 기록을 확인하고 있습니다.</div></section>';
   }
   if(staleAttendanceState.error){
     return '<section class="admin-side-card stale-attendance-card"><div class="admin-side-heading"><div><span>과거 미퇴근</span><h3>확인이 필요해요</h3></div></div><button class="admin-stale-retry" data-stale-retry>다시 확인</button></section>';
   }
   const items=Array.isArray(staleAttendanceState.items)?staleAttendanceState.items:[];
   if(!items.length) return '';
-  return '<section class="admin-side-card stale-attendance-card is-danger"><div class="admin-side-heading"><div><span>과거 미퇴근</span><h3>'+items.length+'건 확인 필요</h3></div><span class="admin-attention-count">'+items.length+'</span></div><p class="stale-attendance-copy">이전 날짜에 출근 후 퇴근이 기록되지 않은 항목입니다.</p><button class="action-button secondary-action stale-attendance-open" data-stale-center><span>미퇴근 기록 확인</span></button></section>';
+  return '<section class="admin-side-card stale-attendance-card is-danger"><div class="admin-side-heading"><div><span>과거 미퇴근</span><h3>'+items.length+'건 확인 필요</h3></div><span class="admin-attention-count">'+items.length+'</span></div><p class="stale-attendance-copy">최근 3개월 중 출근 후 퇴근이 기록되지 않은 항목입니다.</p><button class="action-button secondary-action stale-attendance-open" data-stale-center><span>미퇴근 기록 확인</span></button></section>';
 }
 
 const baseAdminAttentionMarkupForStale=adminAttentionMarkup;
@@ -31,12 +36,35 @@ adminAttentionMarkup=function(snapshot){
 
 async function loadStaleAttendance(force=false){
   if(session?.role!=='admin'||!session?.token||staleAttendanceState.loading) return;
-  if(!force&&Array.isArray(staleAttendanceState.items)&&Date.now()-staleAttendanceState.loadedAt<60000) return;
+  if(!force&&Array.isArray(staleAttendanceState.items)&&Date.now()-staleAttendanceState.loadedAt<300000) return;
   staleAttendanceState.loading=true;
   staleAttendanceState.error='';
   try{
-    const result=await api.listStaleAttendance(session.token);
-    staleAttendanceState.items=Array.isArray(result?.items)?result.items:[];
+    const months=staleAttendanceMonths();
+    const payloads=await Promise.all(months.map((target)=>api.bootstrap(session.token,target)));
+    const employeeMap=new Map();
+    const scheduleMap=new Map();
+    const attendanceMap=new Map();
+    payloads.forEach((payload)=>{
+      (payload?.employees||[]).forEach((row)=>employeeMap.set(row.id,row));
+      (payload?.schedules||[]).forEach((row)=>scheduleMap.set(row.employeeId+'|'+row.workDate,row));
+      (payload?.attendance||[]).forEach((row)=>attendanceMap.set(row.id,row));
+    });
+    const cutoff=kstDate();
+    staleAttendanceState.items=[...attendanceMap.values()]
+      .filter((row)=>row.workDate<cutoff&&row.clockIn&&!row.clockOut)
+      .map((row)=>{
+        const employee=employeeMap.get(row.employeeId)||{};
+        const schedule=row.sessionType==='base'?scheduleMap.get(row.employeeId+'|'+row.workDate):null;
+        return {
+          ...row,
+          employeeName:employee.name||'직원',
+          employeePosition:employee.position||'스태프',
+          scheduledStart:schedule?.scheduledStart||null,
+          scheduledEnd:schedule?.scheduledEnd||null,
+        };
+      })
+      .sort((a,b)=>String(b.workDate).localeCompare(String(a.workDate))||Number(b.sessionNo||1)-Number(a.sessionNo||1));
     staleAttendanceState.loadedAt=Date.now();
   }catch(error){
     staleAttendanceState.error=String(error?.message||'미퇴근 기록을 불러오지 못했습니다.');
@@ -52,8 +80,8 @@ function staleAttendanceCenterMarkup(){
   const rows=items.length?items.map((item)=>{
     const schedule=item.scheduledEnd?'<em>예정 퇴근 '+esc(item.scheduledEnd)+'</em>':'';
     return '<button class="stale-attendance-row" data-stale-edit="'+esc(item.id)+'"><span class="avatar">'+esc(String(item.employeeName||'직원').slice(0,1))+'</span><span><b>'+esc(item.employeeName||'직원')+'</b><small>'+esc(staleAttendanceLabel(item))+'</small>'+schedule+'</span>'+icon('chevron','chevron')+'</button>';
-  }).join(''):'<div class="admin-success-empty">과거 미퇴근 기록이 없습니다.</div>';
-  return '<div class="sheet-heading"><div><span class="sheet-kicker">과거 미퇴근 관리</span><h2>'+(items.length?items.length+'건을 확인해 주세요':'미퇴근 기록이 없습니다')+'</h2><p>퇴근 누락을 실제 시간으로 정정하면 감사 이력에 남습니다.</p></div></div><div class="stale-attendance-list">'+rows+'</div><div class="sheet-actions"><button class="action-button secondary-action" id="refreshStaleAttendance"><span>새로고침</span></button></div>';
+  }).join(''):'<div class="admin-success-empty">최근 3개월에 과거 미퇴근 기록이 없습니다.</div>';
+  return '<div class="sheet-heading"><div><span class="sheet-kicker">과거 미퇴근 관리</span><h2>'+(items.length?items.length+'건을 확인해 주세요':'미퇴근 기록이 없습니다')+'</h2><p>퇴근 누락을 실제 시간으로 정정하면 기존 감사 이력에 남습니다.</p></div></div><div class="stale-attendance-list">'+rows+'</div><div class="sheet-actions"><button class="action-button secondary-action" id="refreshStaleAttendance"><span>새로고침</span></button></div>';
 }
 
 function bindStaleAttendanceCenter(){
@@ -97,7 +125,7 @@ async function saveStaleAttendance(item){
   const button=document.querySelector('#saveStaleAttendance');
   setPending(button,true,'저장 중');
   try{
-    await api.resolveStaleAttendance(session.token,{attendanceId:item.id,clockOut:outValue,reason});
+    await api.correctAttendance(session.token,{attendanceId:item.id,field:'clockOut',newValue:outValue,reason});
     await loadStaleAttendance(true);
     dismissLayer(document.querySelector('.sheet-backdrop'));
     renderAdmin();
