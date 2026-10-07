@@ -19,6 +19,20 @@
 
 모바일은 하단 Floating Navigation, 데스크톱은 좌측 Navigation Rail + Wide Operations Dashboard를 사용합니다.
 
+## 근무표 가져오기
+
+관리자 `근무 > 근무표`에서 **근무표 가져오기**를 사용할 수 있습니다.
+
+- `.xlsx` 근무표는 브라우저에서 직접 분석합니다.
+- `.png/.jpg/.jpeg/.webp` 캡처 이미지는 서버 측 비전 분석으로 표 구조와 시간 블록을 읽습니다.
+- 직원명은 기존 활성 직원과 자동 매칭하고, 애매한 이름만 직접 확인합니다.
+- 수정본은 기본적으로 업로드 당일 이후 일정만 비교합니다.
+- 실제 출퇴근 기록이 있는 날짜는 자동 수정·삭제하지 않습니다.
+- 전체 근무표로 확신할 수 없는 부분 캡처에서는 기존 일정 삭제를 만들지 않습니다.
+- 적용 전 `신규 / 변경 / 삭제 / 보호 / 확인 필요`를 미리 확인하고, 실제 반영은 원자적으로 처리합니다.
+
+운영 세부사항은 `docs/schedule-import-operations.md`를 참고합니다.
+
 ## Generic branding
 
 앱의 표시명은 `근태관리`로 통일합니다.
@@ -46,13 +60,16 @@ npm run build
 - `build.mjs` — v27 baseline을 가져와 범용 v28 dist를 생성
 - `admin-redesign.js` — 관리자 Today / Work / Operations UI 및 interaction
 - `admin-date-tools.js` — 선택 날짜 근태 조회·수정 및 빠른 근무표 편집
+- `schedule-import-core.js` — Excel 근무표 후보 탐지, 시간 정규화, 직원 매칭
+- `schedule-import.js` — 관리자 근무표 가져오기 UI 및 preview/apply 흐름
+- `supabase/functions/attendance-schedule-import/` — 이미지 분석, 서버 diff 검증, 적용 API
 - `tests/admin-redesign.test.mjs` — 관리자 리디자인 회귀 테스트
 - `tests/branding-neutralization.test.mjs` — 특정 업체 브랜딩 재유입 방지 테스트
 - `docs/admin-redesign-v28.md` — 승인된 관리자 UX 스펙
 
 ## Current scope
 
-현재 단계에서는 **표시 브랜딩을 범용화**했습니다. Supabase API와 데이터 저장소까지 업체별 독립 설치형으로 분리하는 작업은 별도 단계입니다.
+현재 단계에서는 **표시 브랜딩을 범용화**했고, 근무표 Excel/이미지 자동 가져오기 기능을 별도 모듈로 추가했습니다. Supabase API와 데이터 저장소를 업체별 독립 설치형으로 분리하는 작업은 별도 단계입니다.
 
 ## Version
 
