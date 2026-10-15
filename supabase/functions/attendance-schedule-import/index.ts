@@ -105,6 +105,7 @@ async function previewScheduleImport(source:any){
   if(!checked.ok) throw new Error(checked.error);
   const diff=decorateDiff(buildScheduleImportDiff({
     ...source,
+    today:today(),
     shifts:context.shifts,
     baseSchedules:context.baseSchedules,
     extraSchedules:context.extraSchedules,
@@ -158,6 +159,7 @@ async function applyScheduleImport(source:any,runId:string,rawToken:string){
   const current=await loadScheduleImportContext(source.targetMonth,source.effectiveDate,source.shifts);
   const currentDiff=decorateDiff(buildScheduleImportDiff({
     ...source,
+    today:today(),
     shifts:current.shifts,
     baseSchedules:current.baseSchedules,
     extraSchedules:current.extraSchedules,
