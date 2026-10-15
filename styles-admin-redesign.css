@@ -54,3 +54,11 @@
 @media(max-width:1023px){.admin-rail{display:none!important}.admin-mobile-nav{display:grid}.admin-workspace{max-width:760px}}
 @media(prefers-reduced-motion:reduce){.admin-redesign-shell *,.admin-redesign-shell *::before,.admin-redesign-shell *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
 @media(min-width:1024px){.admin-mobile-nav{display:none}}
+
+.admin-assigned-shift{display:inline-flex;align-items:center;max-width:100%;margin-top:5px;padding:5px 8px;border-radius:10px;background:var(--blue-soft);color:var(--blue-2);font-size:11px;font-weight:820;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin-staff-status-line{display:block!important;margin-top:5px!important;color:var(--muted)!important;font-size:10px!important}
+.admin-staff-card.is-working .admin-staff-status-line{color:var(--blue)!important}
+.admin-staff-card.is-done .admin-staff-status-line{color:var(--green)!important}
+.admin-inspector-assigned{display:block;margin-top:4px;color:var(--blue-2);font-size:12px;font-weight:800}
+.admin-attendance-summary .is-settlement{background:linear-gradient(145deg,rgba(22,119,255,.1),rgba(255,255,255,.78));box-shadow:inset 0 0 0 1px rgba(22,119,255,.18)}
+.admin-attendance-summary .is-settlement b{color:var(--blue-2)}
