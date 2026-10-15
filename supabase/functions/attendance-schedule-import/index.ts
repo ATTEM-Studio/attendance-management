@@ -49,14 +49,15 @@ function normalizeSource(body:any){
   if(sourceType!=='xlsx') throw new Error('Excel .xlsx 근무표만 가져올 수 있습니다.');
   const targetMonth=text(body?.targetMonth);
   const effectiveDate=text(body?.effectiveDate);
+  const allowPast=body?.allowPast===true;
   const shifts=Array.isArray(body?.shifts)?body.shifts:[];
-  const checked=validateImportPayload({targetMonth,effectiveDate,today:today(),shifts});
+  const checked=validateImportPayload({targetMonth,effectiveDate,allowPast,today:today(),shifts});
   if(!checked.ok) throw new Error(checked.error);
   return {
     sourceType,
     sourceName:text(body?.sourceName),
     sourceFingerprint:text(body?.sourceFingerprint),
-    targetMonth,effectiveDate,
+    targetMonth,effectiveDate,allowPast,
     authoritative:body?.authoritative===true,
     shifts,
   };
@@ -116,6 +117,7 @@ async function previewScheduleImport(source:any){
     source_fingerprint:source.sourceFingerprint,
     target_month:source.targetMonth,
     effective_date:source.effectiveDate,
+    allow_past:source.allowPast===true,
     parsed_count:source.shifts.length,
     add_count:summary.add,
     update_count:summary.update,
@@ -145,11 +147,11 @@ async function syncImportedChecklists(rawToken:string,targetMonth:string){
 async function applyScheduleImport(source:any,runId:string,rawToken:string){
   if(!runId) return out({error:'미리보기 이력을 찾을 수 없습니다.'},400);
   const {data:run,error:runError}=await db.from('schedule_import_runs')
-    .select('id,status,target_month,effective_date,source_type,source_fingerprint')
+    .select('id,status,target_month,effective_date,allow_past,source_type,source_fingerprint')
     .eq('id',runId).maybeSingle();
   if(runError) throw runError;
   if(!run||run.status!=='previewed') return out({error:'적용 가능한 미리보기 이력이 아닙니다.'},409);
-  if(run.target_month!==source.targetMonth||String(run.effective_date)!==source.effectiveDate||run.source_type!==source.sourceType) return out({error:'미리보기와 적용 조건이 달라졌습니다.'},409);
+  if(run.target_month!==source.targetMonth||String(run.effective_date)!==source.effectiveDate||Boolean(run.allow_past)!==Boolean(source.allowPast)||run.source_type!==source.sourceType) return out({error:'미리보기와 적용 조건이 달라졌습니다.'},409);
   if(run.source_fingerprint!==source.sourceFingerprint) return out({error:'미리보기와 적용 파일이 달라졌습니다.'},409);
 
   // Re-load current state immediately before the atomic RPC. This catches preview→apply attendance races.
@@ -173,6 +175,7 @@ async function applyScheduleImport(source:any,runId:string,rawToken:string){
       p_target_month:source.targetMonth,
       p_effective_date:source.effectiveDate,
       p_authoritative:source.authoritative,
+      p_allow_past:source.allowPast===true,
       p_shifts:current.shifts,
     });
     if(rpcError) throw rpcError;

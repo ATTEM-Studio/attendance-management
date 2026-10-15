@@ -26,6 +26,30 @@ function clampEffectiveDate(value,today=scheduleImportToday()) {
   return candidate < today ? today : candidate;
 }
 
+function importMonthStart(targetMonth) {
+  return /^\d{4}-\d{2}$/.test(String(targetMonth||'')) ? String(targetMonth)+'-01' : scheduleImportMonth()+'-01';
+}
+
+function importMonthEnd(targetMonth) {
+  const parts=String(targetMonth||'').split('-').map(Number);
+  if(!parts[0]||!parts[1]) return importMonthStart(targetMonth);
+  const last=new Date(Date.UTC(parts[0],parts[1],0)).getUTCDate();
+  return String(targetMonth)+'-'+String(last).padStart(2,'0');
+}
+
+function resolveImportEffectiveDate(value,targetMonth,allowPast=false,today=scheduleImportToday()) {
+  const monthStart=importMonthStart(targetMonth);
+  const monthEnd=importMonthEnd(targetMonth);
+  const monthKey=String(targetMonth||'');
+  const currentMonth=String(today||'').slice(0,7);
+  const fallback=allowPast ? monthStart : monthKey>currentMonth ? monthStart : today;
+  let candidate=/^\d{4}-\d{2}-\d{2}$/.test(String(value||'')) ? String(value) : fallback;
+  if(candidate<monthStart) candidate=monthStart;
+  if(candidate>monthEnd) candidate=monthEnd;
+  if(!allowPast && candidate<today) candidate=today;
+  return candidate;
+}
+
 function emptyImportSummary() {
   return {add:0,update:0,remove:0,protected:0,needs_review:0,unchanged:0};
 }
@@ -41,7 +65,8 @@ function buildImportPreviewModel(input={}) {
   return {
     sourceType:String(input.sourceType || ''),
     targetMonth:/^\d{4}-\d{2}$/.test(String(input.targetMonth||'')) ? String(input.targetMonth) : scheduleImportMonth(),
-    effectiveDate:clampEffectiveDate(input.effectiveDate,today),
+    allowPast:input.allowPast === true,
+    effectiveDate:resolveImportEffectiveDate(input.effectiveDate,String(input.targetMonth||scheduleImportMonth()),input.allowPast===true,today),
     candidateRegionId:String(input.candidateRegionId || ''),
     employeeMatches:Array.isArray(input.employeeMatches) ? input.employeeMatches : [],
     authoritative:input.authoritative === true,
@@ -64,6 +89,7 @@ function defaultScheduleImportState() {
     candidateRegionId:'',
     targetMonth,
     effectiveDate:today.startsWith(targetMonth) ? today : `${targetMonth}-01`,
+    allowPast:false,
     authoritative:false,
     parsedRows:[],
     shifts:[],
@@ -92,13 +118,15 @@ function importFileStep(model) {
 
 function importCandidateStep(model) {
   const regionOptions=model.regions.map((region,index)=>`<button class="schedule-import-candidate ${region.id===model.candidateRegionId?'is-selected':''}" data-import-region="${esc(region.id)}"><span><b>${esc(region.sheetName || `근무표 ${index+1}`)}</b><small>${esc(region.range || '')} · 점수 ${Number(region.score||0)}</small></span>${index===0?'<em>추천</em>':''}</button>`).join('');
+  const minDate=model.allowPast?importMonthStart(model.targetMonth):(model.targetMonth>scheduleImportToday().slice(0,7)?importMonthStart(model.targetMonth):scheduleImportToday());
+  const effective=resolveImportEffectiveDate(model.effectiveDate,model.targetMonth,model.allowPast);
   return `<section class="schedule-import-stage"><div class="schedule-import-heading"><span>근무표 선택</span><h3>적용할 범위와 시작일을 확인하세요.</h3></div>
     <div class="schedule-import-candidates">${regionOptions || '<div class="schedule-import-empty">근무표 후보를 찾지 못했습니다.</div>'}</div>
-    <div class="schedule-import-fields"><label><span>대상 월</span><input id="scheduleImportMonth" type="month" value="${esc(model.targetMonth)}"></label><label><span>변경 적용 시작일</span><input id="scheduleImportEffective" type="date" min="${esc(scheduleImportToday())}" value="${esc(clampEffectiveDate(model.effectiveDate))}"></label></div>
-    <p class="schedule-import-safety">적용 시작일 이전 일정과 실제 출퇴근이 발생한 일정은 자동으로 바꾸지 않습니다.</p>
+    <div class="schedule-import-fields"><label><span>대상 월</span><input id="scheduleImportMonth" type="month" value="${esc(model.targetMonth)}"></label><label><span>변경 적용 시작일</span><input id="scheduleImportEffective" type="date" min="${esc(minDate)}" max="${esc(importMonthEnd(model.targetMonth))}" value="${esc(effective)}"></label></div>
+    <label class="schedule-import-past-option"><input id="scheduleImportAllowPast" type="checkbox" ${model.allowPast?'checked':''}><span><b>과거 일정까지 일괄 반영</b><small>켜면 대상 월의 지난 날짜도 적용 범위에 포함합니다.</small></span></label>
+    <p class="schedule-import-safety ${model.allowPast?'is-warning':''}">${model.allowPast?'과거 일정 포함 모드입니다. 실제 출퇴근 기록이 있는 날짜는 보호되어 자동 변경되지 않습니다.':'기본값은 오늘 이후만 반영합니다. 실제 출퇴근이 발생한 일정은 자동으로 바꾸지 않습니다.'}</p>
     <button class="action-button primary-action" id="scheduleImportParse"><span>직원 확인으로 계속</span></button></section>`;
 }
-
 function importEmployeeStep(model) {
   const review=model.employeeMatches.filter((row)=>row.match?.needsReview);
   const safe=model.employeeMatches.filter((row)=>!row.match?.needsReview);
@@ -274,7 +302,9 @@ async function handleScheduleImportFile(file) {
 
 async function parseSelectedScheduleImportRegion() {
   scheduleImportState.targetMonth=document.querySelector?.('#scheduleImportMonth')?.value || scheduleImportState.targetMonth;
-  scheduleImportState.effectiveDate=clampEffectiveDate(document.querySelector?.('#scheduleImportEffective')?.value || scheduleImportState.effectiveDate);
+  scheduleImportState.allowPast=document.querySelector?.('#scheduleImportAllowPast')?.checked === true;
+  if(!scheduleImportState.allowPast && scheduleImportState.targetMonth<scheduleImportToday().slice(0,7)) throw new Error('지난 월 근무표는 ‘과거 일정까지 일괄 반영’을 켜야 합니다.');
+  scheduleImportState.effectiveDate=resolveImportEffectiveDate(document.querySelector?.('#scheduleImportEffective')?.value || scheduleImportState.effectiveDate,scheduleImportState.targetMonth,scheduleImportState.allowPast);
   const region=scheduleImportState.regions.find((item)=>item.id===scheduleImportState.candidateRegionId) || scheduleImportState.regions[0];
   if (!region) throw new Error('근무표 영역을 선택해 주세요.');
   scheduleImportState.authoritative=region.authoritative===true;
@@ -291,9 +321,9 @@ async function requestScheduleImportPreview() {
   if (unresolved.length) throw new Error('확인이 필요한 직원을 먼저 연결해 주세요.');
   const result=await api.previewScheduleImport(session.token,{
     sourceType:scheduleImportState.sourceType,sourceName:scheduleImportState.sourceName,sourceFingerprint:scheduleImportState.sourceFingerprint,
-    targetMonth:scheduleImportState.targetMonth,effectiveDate:clampEffectiveDate(scheduleImportState.effectiveDate),authoritative:scheduleImportState.authoritative,shifts:scheduleImportState.shifts,
+    targetMonth:scheduleImportState.targetMonth,effectiveDate:resolveImportEffectiveDate(scheduleImportState.effectiveDate,scheduleImportState.targetMonth,scheduleImportState.allowPast),allowPast:scheduleImportState.allowPast===true,authoritative:scheduleImportState.authoritative,shifts:scheduleImportState.shifts,
   });
-  scheduleImportState.preview=buildImportPreviewModel({...result,sourceType:scheduleImportState.sourceType,targetMonth:scheduleImportState.targetMonth,effectiveDate:scheduleImportState.effectiveDate,authoritative:scheduleImportState.authoritative,diff:result?.diff||[]});
+  scheduleImportState.preview=buildImportPreviewModel({...result,sourceType:scheduleImportState.sourceType,targetMonth:scheduleImportState.targetMonth,effectiveDate:scheduleImportState.effectiveDate,allowPast:scheduleImportState.allowPast===true,authoritative:scheduleImportState.authoritative,diff:result?.diff||[]});
   scheduleImportState.previewSelectedDate='';
   scheduleImportState.runId=result?.runId || '';
   scheduleImportState.step=4;
@@ -302,7 +332,7 @@ async function requestScheduleImportPreview() {
 async function applyScheduleImportChanges() {
   const result=await api.applyScheduleImport(session.token,{
     runId:scheduleImportState.runId,sourceType:scheduleImportState.sourceType,sourceName:scheduleImportState.sourceName,sourceFingerprint:scheduleImportState.sourceFingerprint,
-    targetMonth:scheduleImportState.targetMonth,effectiveDate:clampEffectiveDate(scheduleImportState.effectiveDate),authoritative:scheduleImportState.authoritative,shifts:scheduleImportState.shifts,
+    targetMonth:scheduleImportState.targetMonth,effectiveDate:resolveImportEffectiveDate(scheduleImportState.effectiveDate,scheduleImportState.targetMonth,scheduleImportState.allowPast),allowPast:scheduleImportState.allowPast===true,authoritative:scheduleImportState.authoritative,shifts:scheduleImportState.shifts,
   });
   return result;
 }
@@ -311,6 +341,22 @@ function bindScheduleImportSheet() {
   const file=document.querySelector?.('#scheduleImportFile');
   if (file) file.onchange=async(event)=>{try{setPending?.(event.target,true,'분석 중');await handleScheduleImportFile(event.target.files?.[0]);}catch(error){scheduleImportState.error=error.message;toastMsg?.(error.message);reopenScheduleImport();}};
   document.querySelectorAll?.('[data-import-region]').forEach((button)=>{button.onclick=()=>{scheduleImportState.candidateRegionId=button.dataset.importRegion;reopenScheduleImport();};});
+  const monthInput=document.querySelector?.('#scheduleImportMonth');
+  const effectiveInput=document.querySelector?.('#scheduleImportEffective');
+  const allowPastInput=document.querySelector?.('#scheduleImportAllowPast');
+  const syncPastDateControls=()=>{
+    if(!monthInput||!effectiveInput||!allowPastInput) return;
+    const targetMonth=monthInput.value || scheduleImportState.targetMonth;
+    const allowPast=allowPastInput.checked===true;
+    scheduleImportState.targetMonth=targetMonth;
+    scheduleImportState.allowPast=allowPast;
+    effectiveInput.min=allowPast?importMonthStart(targetMonth):(targetMonth>scheduleImportToday().slice(0,7)?importMonthStart(targetMonth):scheduleImportToday());
+    effectiveInput.max=importMonthEnd(targetMonth);
+    effectiveInput.value=resolveImportEffectiveDate(allowPast?importMonthStart(targetMonth):effectiveInput.value,targetMonth,allowPast);
+    scheduleImportState.effectiveDate=effectiveInput.value;
+  };
+  if(allowPastInput) allowPastInput.onchange=syncPastDateControls;
+  if(monthInput) monthInput.onchange=()=>{if(allowPastInput?.checked) scheduleImportState.effectiveDate=importMonthStart(monthInput.value);syncPastDateControls();};
   const parseButton=document.querySelector?.('#scheduleImportParse');
   if (parseButton) parseButton.onclick=async()=>{setPending?.(parseButton,true,'확인 중');try{await parseSelectedScheduleImportRegion();reopenScheduleImport();}catch(error){toastMsg?.(error.message);}finally{if(parseButton?.isConnected)setPending?.(parseButton,false);}};
   document.querySelectorAll?.('[data-import-alias]').forEach((select)=>{select.onchange=async()=>{const label=select.dataset.importAlias;const employeeId=select.value;if(!employeeId)return;scheduleImportState.aliases[label]=employeeId;try{await api.saveScheduleImportAlias(session.token,{label,employeeId});}catch(error){console.warn('Alias save skipped:',error);}rematchScheduleImportRows();reopenScheduleImport();};});

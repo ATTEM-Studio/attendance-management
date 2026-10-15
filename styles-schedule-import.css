@@ -35,3 +35,11 @@
 .schedule-import-apply-bar .action-button{min-width:160px}
 @media (prefers-color-scheme:dark){.schedule-import-apply-bar{background:linear-gradient(to bottom,rgba(20,20,20,0),rgba(20,20,20,.92) 18%,rgba(20,20,20,.98))}}
 @media(max-width:680px){.schedule-import-calendar-title{align-items:center}.schedule-import-calendar-title span{display:none}.schedule-import-calendar,.schedule-import-calendar-weekdays{gap:4px}.schedule-import-calendar-day{min-height:48px;padding:6px;border-radius:10px;grid-template-rows:auto auto}.schedule-import-calendar-mini-list{display:none}.schedule-import-calendar-date{font-size:11px}.schedule-import-calendar-count{font-size:9px}.schedule-import-selected .schedule-import-diffs{max-height:180px}.schedule-import-apply-bar{align-items:stretch;flex-direction:column}.schedule-import-apply-bar .action-button{width:100%;min-width:0}}
+
+.schedule-import-past-option{display:flex;align-items:flex-start;gap:11px;padding:14px 15px;border:1px solid rgba(127,127,127,.14);border-radius:15px;background:rgba(127,127,127,.045);cursor:pointer}
+.schedule-import-past-option input{width:18px;height:18px;margin:1px 0 0;flex:0 0 auto;accent-color:#2563eb}
+.schedule-import-past-option span{display:grid;gap:3px;min-width:0}
+.schedule-import-past-option b{font-size:13px}
+.schedule-import-past-option small{font-size:11px;line-height:1.45;opacity:.6}
+.schedule-import-safety.is-warning{background:rgba(245,158,11,.1);color:#92400e}
+@media(prefers-color-scheme:dark){.schedule-import-safety.is-warning{color:#fbbf24}}

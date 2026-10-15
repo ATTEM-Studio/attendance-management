@@ -73,9 +73,10 @@ export function validateImportPayload(input={}){
   const targetMonth=text(input.targetMonth);
   const effectiveDate=text(input.effectiveDate);
   const today=text(input.today||effectiveDate);
+  const allowPast=input.allowPast===true;
   if(!monthOk(targetMonth))return {ok:false,error:'대상 월 형식이 올바르지 않습니다.'};
   if(!dateOk(effectiveDate))return {ok:false,error:'적용 시작일 형식이 올바르지 않습니다.'};
-  if(dateOk(today)&&effectiveDate<today)return {ok:false,error:'과거 날짜부터 자동 변경할 수 없습니다.'};
+  if(dateOk(today)&&effectiveDate<today&&!allowPast)return {ok:false,error:'과거 일정 반영 옵션을 켜야 지난 날짜부터 적용할 수 있습니다.'};
   if(!Array.isArray(input.shifts))return {ok:false,error:'근무표 데이터가 필요합니다.'};
 
   const byKey=new Map();
