@@ -4,8 +4,31 @@ function openCorrectionManager() {
   document.querySelectorAll('[data-correct]').forEach((button) => { button.onclick = () => openCorrectionSheet(button.dataset.correct); });
 }
 
+function assignedScheduleMinutes(schedule) {
+  if (!schedule?.scheduledStart || !schedule?.scheduledEnd) return 0;
+  const toMinutes = (value) => {
+    const [hour,minute] = String(value).slice(0,5).split(':').map(Number);
+    return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : 0;
+  };
+  const start = toMinutes(schedule.scheduledStart);
+  const end = toMinutes(schedule.scheduledEnd);
+  return Math.max(0, end - start);
+}
+
+function attendanceSettlementMinutes(attendance) {
+  if (!attendance?.clockIn) return 0;
+  if (attendance.sessionType === 'extra') return Number(attendance.workMinutes || 0);
+  const schedule = scheduleFor(attendance.employeeId, attendance.workDate);
+  if (schedule && attendance.clockOut) return assignedScheduleMinutes(schedule);
+  return Number(attendance.workMinutes || 0);
+}
+
 function attendanceAdminRow(attendance) {
-  return `<button class="record-admin-row" data-correct="${attendance.id}"><div><b>${esc(attendance.workDate)} · ${esc(employeeById(attendance.employeeId)?.name || '')} · ${esc(sessionLabel(attendance))}</b><span>출근 ${fmtTime(attendance.clockIn)} · 퇴근 ${fmtTime(attendance.clockOut)}</span></div><span>${formatMinutes(attendance.workMinutes || 0)}</span>${icon('chevron','chevron')}</button>`;
+  const schedule = attendance.sessionType === 'extra' ? null : scheduleFor(attendance.employeeId, attendance.workDate);
+  const assigned = schedule ? `${schedule.scheduledStart}–${schedule.scheduledEnd}` : '';
+  const actual = `${fmtTime(attendance.clockIn)}–${fmtTime(attendance.clockOut)}`;
+  const settlement = attendanceSettlementMinutes(attendance);
+  return `<button class="record-admin-row ${schedule ? 'has-assigned-time' : 'is-extra-session'}" data-correct="${attendance.id}"><div class="record-admin-copy"><b>${esc(attendance.workDate)} · ${esc(employeeById(attendance.employeeId)?.name || '')} · ${esc(sessionLabel(attendance))}</b>${schedule ? `<strong class="record-assigned-time">할당 ${esc(assigned)}</strong>` : '<strong class="record-extra-time">추가근무 · 실제시간 기준</strong>'}<span class="record-actual-time">실제 ${esc(actual)}</span></div><span class="record-settlement-time"><b>${formatMinutes(settlement)}</b><small>${schedule ? '정산 기준' : '실제 기준'}</small></span>${icon('chevron','chevron')}</button>`;
 }
 
 function localInputValue(iso) {

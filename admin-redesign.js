@@ -72,7 +72,7 @@ function adminTodayStaffCard(row) {
   return `<article class="admin-staff-card ${statusClass}">
     <button class="admin-staff-card-main" data-admin-staff="${employee.id}">
       <span class="avatar">${esc(employee.name.slice(0,1))}</span>
-      <span class="admin-staff-card-copy"><b>${esc(employee.name)}</b><small>${esc(shift)}</small><strong>${esc(control.status)}${daily.open ? ` · ${fmtTime(daily.open.clockIn)} 출근` : ''}</strong></span>
+      <span class="admin-staff-card-copy"><b>${esc(employee.name)}</b>${schedule ? `<span class="admin-assigned-shift">할당 ${esc(schedule.scheduledStart)}–${esc(schedule.scheduledEnd)} · ${esc(shiftTypeLabel(schedule.shiftType))}</span>` : `<small>${esc(shift)}</small>`}<small class="admin-staff-status-line">${esc(control.status)}${daily.open ? ` · 실제 ${fmtTime(daily.open.clockIn)} 출근` : daily.completed.length ? ` · 실제 ${fmtTime(daily.completed[daily.completed.length - 1].clockOut)} 퇴근` : ''}</small></span>
       ${icon('chevron','chevron')}
     </button>
     <div class="admin-staff-card-foot">
@@ -147,7 +147,7 @@ function adminScheduleInspector() {
   const dateLabel = date ? longDate(date) : '';
   return `<aside class="admin-schedule-inspector">
     <div class="admin-inspector-heading"><span>선택 날짜</span><h3>${date ? esc(dateLabel) : '날짜를 선택하세요'}</h3></div>
-    ${date ? `<div class="admin-inspector-list">${assignments.length ? assignments.map((row) => { const employee = employeeById(row.employeeId); return `<div class="admin-inspector-row"><span class="avatar">${esc(employee?.name?.slice(0,1) || '?')}</span><span><b>${esc(employee?.name || '직원')}</b><small>${esc(row.scheduledStart)}–${esc(row.scheduledEnd)} · ${esc(shiftTypeLabel(row.shiftType))}</small></span></div>`; }).join('') : '<div class="admin-empty-state compact"><b>배정된 근무가 없어요.</b><span>이 날짜에 첫 근무를 배정해 보세요.</span></div>'}</div>
+    ${date ? `<div class="admin-inspector-list">${assignments.length ? assignments.map((row) => { const employee = employeeById(row.employeeId); return `<div class="admin-inspector-row"><span class="avatar">${esc(employee?.name?.slice(0,1) || '?')}</span><span><b>${esc(employee?.name || '직원')}</b><strong class="admin-inspector-assigned">할당 ${esc(row.scheduledStart)}–${esc(row.scheduledEnd)}</strong><small>${esc(shiftTypeLabel(row.shiftType))}</small></span></div>`; }).join('') : '<div class="admin-empty-state compact"><b>배정된 근무가 없어요.</b><span>이 날짜에 첫 근무를 배정해 보세요.</span></div>'}</div>
       <button class="action-button primary-action admin-inspector-action" id="adminScheduleManage"><span>${assignments.length ? '근무 추가·수정' : '근무 배정'}</span></button>` : '<div class="admin-empty-state"><b>근무를 확인하거나 배정할 날짜를 선택하세요.</b><span>달력에서 날짜를 누르면 배정된 직원을 볼 수 있어요.</span></div>'}
   </aside>`;
 }
@@ -165,7 +165,7 @@ function adminScheduleWorkspace() {
 
 function adminAttendanceWorkspace() {
   const all = (state.attendance || []).slice().sort((a,b) => b.workDate.localeCompare(a.workDate) || Number(b.sessionNo || 1) - Number(a.sessionNo || 1));
-  const totalMinutes = all.reduce((sum,row) => sum + Number(row.workMinutes || 0), 0);
+  const totalMinutes = all.reduce((sum,row) => sum + attendanceSettlementMinutes(row), 0);
   const lateCount = all.filter((row) => Number(row.lateMinutes || 0) > 0).length;
   const extraCount = all.filter((row) => row.sessionType === 'extra').length;
   let records = all;
@@ -174,7 +174,7 @@ function adminAttendanceWorkspace() {
   const options = activeEmployees().map((employee) => `<option value="${employee.id}" ${employee.id === adminAttendanceEmployee ? 'selected' : ''}>${esc(employee.name)}</option>`).join('');
   return `<section class="admin-work-panel">
     <div class="admin-work-toolbar"><div><span>근태 기록</span><h2>${esc(monthTitle(adminWorkMonth))}</h2></div><div class="admin-work-actions"><button class="circle-button small" id="adminWorkPrev" aria-label="이전 달">${icon('back')}</button><button class="circle-button small" id="adminWorkNext" aria-label="다음 달">${icon('forward')}</button><button class="admin-secondary-cta" id="exportExcel">${icon('download')}<span>Excel</span></button></div></div>
-    <div class="admin-attendance-summary"><div><b>${formatMinutes(totalMinutes)}</b><span>총 근무시간</span></div><div><b>${lateCount}</b><span>지각 기록</span></div><div><b>${extraCount}</b><span>추가근무</span></div></div>
+    <div class="admin-attendance-summary"><div class="is-settlement"><b>${formatMinutes(totalMinutes)}</b><span>정산 기준시간</span></div><div><b>${lateCount}</b><span>지각 기록</span></div><div><b>${extraCount}</b><span>추가근무</span></div></div>
     <div class="admin-record-filters"><div class="admin-small-segmented"><button class="${adminAttendanceFilter === 'all' ? 'is-active' : ''}" data-attendance-filter="all">전체</button><button class="${adminAttendanceFilter === 'issues' ? 'is-active' : ''}" data-attendance-filter="issues">이상 기록</button></div><select id="adminAttendanceEmployee" aria-label="직원 필터"><option value="">전체 직원</option>${options}</select></div>
     <div class="admin-attendance-records">${records.length ? records.map(attendanceAdminRow).join('') : '<div class="admin-empty-state"><b>조건에 맞는 근태 기록이 없어요.</b><span>필터를 변경하거나 다른 달을 확인해 보세요.</span></div>'}</div>
   </section>`;
