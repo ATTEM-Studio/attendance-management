@@ -127,7 +127,8 @@ export function buildScheduleImportDiff(input={}){
     if(!before.length&&after.length)status='add';
     else if(before.length&&!after.length)status='remove';
     else if(!sameSegments(before,after))status='update';
-    if(status!=='unchanged'&&hasAttendance(input.attendance,key))status='protected';
+    const pastOverride=input.allowPast===true&&dateOk(text(input.today))&&workDate<text(input.today);
+    if(status!=='unchanged'&&hasAttendance(input.attendance,key)&&!pastOverride)status='protected';
     diff.push({
       employeeId,workDate,
       employeeLabel:after[0]?.employeeLabel||before[0]?.employeeLabel||'',
