@@ -17,6 +17,15 @@ const ft=(v:any)=>!v?'':new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',h
 const wd=(d:string)=>['일','월','화','수','목','금','토'][new Date(`${d}T00:00:00+09:00`).getDay()];
 const sl=(a:any)=>a?.session_type==='extra'?`추가 근무 ${Math.max(1,Number(a.session_no||2)-1)}`:'기본 근무';
 const workDays=(rows:any[])=>new Set(rows.filter(a=>a.clock_in).map(a=>a.work_date)).size;
+const hm=(v:any)=>{const [h,m]=String(v||'').slice(0,5).split(':').map(Number);return Number.isFinite(h)&&Number.isFinite(m)?h*60+m:0};
+const scheduledMinutes=(schedule:any)=>schedule?.scheduled_start&&schedule?.scheduled_end?Math.max(0,hm(schedule.scheduled_end)-hm(schedule.scheduled_start)):0;
+const settlementMinutes=(attendance:any,schedule:any)=>{
+  if(!attendance?.clock_in)return 0;
+  if(attendance?.session_type==='extra')return Math.max(0,Number(attendance?.work_minutes)||0);
+  if(schedule?.scheduled_start&&schedule?.scheduled_end&&attendance?.clock_out)return scheduledMinutes(schedule);
+  return Math.max(0,Number(attendance?.work_minutes)||0);
+};
+const actualMinutes=(attendance:any)=>Math.max(0,Number(attendance?.work_minutes)||0);
 
 const sheet=(rows:string[],merges:string[],widths:number[],freeze:number,dim:string)=>`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="${dim}"/><sheetViews><sheetView workbookViewId="0">${freeze?`<pane ySplit="${freeze-1}" topLeftCell="A${freeze}" activePane="bottomLeft" state="frozen"/>`:''}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>${widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${rows.join('')}</sheetData>${merges.length?`<mergeCells count="${merges.length}">${merges.map(x=>`<mergeCell ref="${x}"/>`).join('')}</mergeCells>`:''}<pageMargins left="0.22" right="0.22" top="0.35" bottom="0.45" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/><headerFooter><oddFooter>&amp;L근태관리 보고서&amp;C페이지 &amp;P / &amp;N&amp;R시스템 출력</oddFooter></headerFooter></worksheet>`;
 
@@ -58,27 +67,29 @@ function build(store:string,month:string,emps:any[],sched:any[],att:any[]){
   const names=['통합 근태관리'];
   const areas:string[]=[];
   const titles:number[]=[];
-  const tw=att.reduce((n,a)=>n+(a.work_minutes||0),0);
+  const tw=rec.reduce((n,x)=>n+settlementMinutes(x.attendance,x.schedule),0);
+  const actualTw=att.reduce((n,a)=>n+actualMinutes(a),0);
   const ov=att.reduce((n,a)=>n+(a.overtime_minutes||0),0);
   const overallWorkDays=new Set(att.filter(a=>a.clock_in).map(a=>`${a.employee_id}|${a.work_date}`)).size;
 
   let rows:string[]=[];
   rows.push(
     rw(1,[sc(1,1,'근태관리 월간 보고서',1)],30),
-    rw(2,[sc(2,1,'세무 증빙 제출용 · 시스템 근태 기록 기준',2)]),
+    rw(2,[sc(2,1,'근무 정산 참고용 · 기본근무=할당시간 · 추가근무=실제시간',2)]),
     rw(4,[sc(4,1,'사업장',3),sc(4,2,store,4),sc(4,5,'대상기간',3),sc(4,6,month,4),sc(4,10,'출력일',3),sc(4,11,new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul'}).format(new Date()),4)]),
-    rw(6,[sc(6,1,'근무 인원',5),nc(6,2,rel.length,6),sc(6,3,'총 근무일',5),nc(6,4,overallWorkDays,6),sc(6,5,'총 근무시간',5),sc(6,6,fm(tw),6),sc(6,7,'지각',5),nc(6,8,att.filter(a=>a.late_minutes>0).length,6),sc(6,9,'조퇴',5),nc(6,10,att.filter(a=>a.early_leave_minutes>0).length,6),sc(6,11,'연장근무',5),sc(6,12,fm(ov),6)]),
-    rw(8,['직원','직급','근무일','근무구간','총 근무','지각','조퇴','연장'].map((v,i)=>sc(8,i+1,v,7)))
+    rw(6,[sc(6,1,'근무 인원',5),nc(6,2,rel.length,6),sc(6,3,'총 근무일',5),nc(6,4,overallWorkDays,6),sc(6,5,'정산 근무시간',5),sc(6,6,fm(tw),6),sc(6,7,'지각',5),nc(6,8,att.filter(a=>a.late_minutes>0).length,6),sc(6,9,'조퇴',5),nc(6,10,att.filter(a=>a.early_leave_minutes>0).length,6),sc(6,11,'연장근무',5),sc(6,12,fm(ov),6)]),
+    rw(8,['직원','직급','근무일','근무구간','정산 근무','지각','조퇴','연장'].map((v,i)=>sc(8,i+1,v,7)))
   );
   let r=9;
   for(const e of rel){
     const aa=att.filter(a=>a.employee_id===e.id);
-    rows.push(rw(r,[sc(r,1,e.name,9),sc(r,2,e.position,8),nc(r,3,workDays(aa),8),nc(r,4,aa.filter(a=>a.clock_in).length,8),sc(r,5,fm(aa.reduce((n,a)=>n+(a.work_minutes||0),0)),8),nc(r,6,aa.filter(a=>a.late_minutes>0).length,8),nc(r,7,aa.filter(a=>a.early_leave_minutes>0).length,8),sc(r,8,fm(aa.reduce((n,a)=>n+(a.overtime_minutes||0),0)),8)]));
+    const er=rec.filter(x=>x.employee_id===e.id);
+    rows.push(rw(r,[sc(r,1,e.name,9),sc(r,2,e.position,8),nc(r,3,workDays(aa),8),nc(r,4,aa.filter(a=>a.clock_in).length,8),sc(r,5,fm(er.reduce((n,x)=>n+settlementMinutes(x.attendance,x.schedule),0)),8),nc(r,6,aa.filter(a=>a.late_minutes>0).length,8),nc(r,7,aa.filter(a=>a.early_leave_minutes>0).length,8),sc(r,8,fm(aa.reduce((n,a)=>n+(a.overtime_minutes||0),0)),8)]));
     r++;
   }
   r++;
   const integratedHeader=r;
-  rows.push(rw(r,['날짜','요일','직원','직급','근무 구분','예정 출근','예정 퇴근','실제 출근','실제 퇴근','실근무','지각','조퇴','연장'].map((v,i)=>sc(r,i+1,v,7)),24));
+  rows.push(rw(r,['날짜','요일','직원','직급','근무 구분','할당 출근','할당 퇴근','실제 출근','실제 퇴근','실제 시간','정산 시간','지각','조퇴','연장'].map((v,i)=>sc(r,i+1,v,7)),24));
   r++;
   for(const x of rec){
     const a=x.attendance;
@@ -86,14 +97,14 @@ function build(store:string,month:string,emps:any[],sched:any[],att:any[]){
     rows.push(rw(r,[
       sc(r,1,x.work_date,8),sc(r,2,wd(x.work_date),8),sc(r,3,x.emp.name,9),sc(r,4,x.emp.position,8),
       sc(r,5,a?sl(a):'기본 근무',8),sc(r,6,String(s.scheduled_start||'').slice(0,5),8),sc(r,7,String(s.scheduled_end||'').slice(0,5),8),
-      sc(r,8,ft(a?.clock_in),8),sc(r,9,ft(a?.clock_out),8),sc(r,10,a?.clock_in?fm(a.work_minutes):'',8),
-      sc(r,11,a?.late_minutes||'',8),sc(r,12,a?.early_leave_minutes||'',8),sc(r,13,a?.overtime_minutes||'',8)
+      sc(r,8,ft(a?.clock_in),8),sc(r,9,ft(a?.clock_out),8),sc(r,10,a?.clock_in?fm(actualMinutes(a)):'',8),sc(r,11,a?.clock_in?fm(settlementMinutes(a,s)):'',10),
+      sc(r,12,a?.late_minutes||'',8),sc(r,13,a?.early_leave_minutes||'',8),sc(r,14,a?.overtime_minutes||'',8)
     ]));
     r++;
   }
-  rows.push(rw(r,[sc(r,1,'합계',10),sc(r,10,fm(tw),10),sc(r,11,String(att.reduce((n,a)=>n+(a.late_minutes||0),0)),10),sc(r,12,String(att.reduce((n,a)=>n+(a.early_leave_minutes||0),0)),10),sc(r,13,fm(ov),10)]));
-  sheets.push(sheet(rows,['A1:M1',`A${r}:I${r}`],[11,6,11,10,12,10,10,11,11,10,7,7,9],integratedHeader,`A1:M${r}`));
-  areas.push(`$A$1:$M$${r}`);
+  rows.push(rw(r,[sc(r,1,'합계',10),sc(r,10,fm(actualTw),10),sc(r,11,fm(tw),10),sc(r,12,String(att.reduce((n,a)=>n+(a.late_minutes||0),0)),10),sc(r,13,String(att.reduce((n,a)=>n+(a.early_leave_minutes||0),0)),10),sc(r,14,fm(ov),10)]));
+  sheets.push(sheet(rows,['A1:N1',`A${r}:I${r}`],[11,6,11,10,12,10,10,11,11,10,10,7,7,9],integratedHeader,`A1:N${r}`));
+  areas.push(`$A$1:$N${r}`);
   titles.push(integratedHeader);
 
   for(const e of rel){
@@ -103,11 +114,11 @@ function build(store:string,month:string,emps:any[],sched:any[],att:any[]){
     const aa=att.filter(a=>a.employee_id===e.id);
     rows=[
       rw(1,[sc(1,1,`${e.name} 개인 근태관리 기록 보고서`,1)],30),
-      rw(2,[sc(2,1,'세무 증빙 제출용 · 개인 월간 근태',2)]),
+      rw(2,[sc(2,1,'근무 정산 참고용 · 기본근무=할당시간 · 추가근무=실제시간',2)]),
       rw(4,[sc(4,1,'사업장',3),sc(4,2,store,4),sc(4,4,'직원',3),sc(4,5,e.name,4),sc(4,7,'직급',3),sc(4,8,e.position,4)]),
       rw(5,[sc(5,1,'대상기간',3),sc(5,2,month,4)]),
-      rw(7,[sc(7,1,'근무일',5),nc(7,2,workDays(aa),6),sc(7,3,'근무구간',5),nc(7,4,aa.filter(a=>a.clock_in).length,6),sc(7,5,'총 근무',5),sc(7,6,fm(aa.reduce((n,a)=>n+(a.work_minutes||0),0)),6),sc(7,7,'지각',5),nc(7,8,aa.filter(a=>a.late_minutes>0).length,6),sc(7,9,'조퇴',5),nc(7,10,aa.filter(a=>a.early_leave_minutes>0).length,6),sc(7,11,'연장',5),sc(7,12,fm(aa.reduce((n,a)=>n+(a.overtime_minutes||0),0)),6)]),
-      rw(9,['날짜','요일','근무 구분','예정 근무','출근','퇴근','실근무','지각','조퇴','연장','비고'].map((v,i)=>sc(9,i+1,v,7)),24)
+      rw(7,[sc(7,1,'근무일',5),nc(7,2,workDays(aa),6),sc(7,3,'근무구간',5),nc(7,4,aa.filter(a=>a.clock_in).length,6),sc(7,5,'정산 근무',5),sc(7,6,fm(er.reduce((n,x)=>n+settlementMinutes(x.attendance,x.schedule),0)),6),sc(7,7,'실제 기록',5),sc(7,8,fm(aa.reduce((n,a)=>n+actualMinutes(a),0)),6),sc(7,9,'지각',5),nc(7,10,aa.filter(a=>a.late_minutes>0).length,6),sc(7,11,'조퇴',5),nc(7,12,aa.filter(a=>a.early_leave_minutes>0).length,6)]),
+      rw(9,['날짜','요일','근무 구분','할당 근무','실제 출근','실제 퇴근','실제 시간','정산 시간','지각','조퇴','연장','비고'].map((v,i)=>sc(9,i+1,v,7)),24)
     ];
     r=10;
     for(const x of er){
@@ -116,15 +127,15 @@ function build(store:string,month:string,emps:any[],sched:any[],att:any[]){
       rows.push(rw(r,[
         sc(r,1,x.work_date,8),sc(r,2,wd(x.work_date),8),sc(r,3,a?sl(a):'기본 근무',8),
         sc(r,4,s.scheduled_start?`${String(s.scheduled_start).slice(0,5)}–${String(s.scheduled_end).slice(0,5)}`:'',8),
-        sc(r,5,ft(a?.clock_in),8),sc(r,6,ft(a?.clock_out),8),sc(r,7,a?.clock_in?fm(a.work_minutes):'',8),
-        sc(r,8,a?.late_minutes||'',8),sc(r,9,a?.early_leave_minutes||'',8),sc(r,10,a?.overtime_minutes||'',8),
-        sc(r,11,!a?.clock_in?'미출근':a?.session_type==='extra'?'추가 근무':'',8)
+        sc(r,5,ft(a?.clock_in),8),sc(r,6,ft(a?.clock_out),8),sc(r,7,a?.clock_in?fm(actualMinutes(a)):'',8),sc(r,8,a?.clock_in?fm(settlementMinutes(a,s)):'',10),
+        sc(r,9,a?.late_minutes||'',8),sc(r,10,a?.early_leave_minutes||'',8),sc(r,11,a?.overtime_minutes||'',8),
+        sc(r,12,!a?.clock_in?'미출근':a?.session_type==='extra'?'추가 근무 · 실제시간 정산':s.scheduled_start?'기본 근무 · 할당시간 정산':'기본 근무 · 실제시간 대체',8)
       ]));
       r++;
     }
-    rows.push(rw(r,[sc(r,1,'월 합계',10),sc(r,7,fm(aa.reduce((n,a)=>n+(a.work_minutes||0),0)),10),sc(r,8,String(aa.reduce((n,a)=>n+(a.late_minutes||0),0)),10),sc(r,9,String(aa.reduce((n,a)=>n+(a.early_leave_minutes||0),0)),10),sc(r,10,fm(aa.reduce((n,a)=>n+(a.overtime_minutes||0),0)),10)]));
-    sheets.push(sheet(rows,['A1:K1',`A${r}:F${r}`],[11,6,12,16,10,10,10,7,7,8,10],9,`A1:K${r}`));
-    areas.push(`$A$1:$K$${r}`);
+    rows.push(rw(r,[sc(r,1,'월 합계',10),sc(r,7,fm(aa.reduce((n,a)=>n+actualMinutes(a),0)),10),sc(r,8,fm(er.reduce((n,x)=>n+settlementMinutes(x.attendance,x.schedule),0)),10),sc(r,9,String(aa.reduce((n,a)=>n+(a.late_minutes||0),0)),10),sc(r,10,String(aa.reduce((n,a)=>n+(a.early_leave_minutes||0),0)),10),sc(r,11,fm(aa.reduce((n,a)=>n+(a.overtime_minutes||0),0)),10)]));
+    sheets.push(sheet(rows,['A1:L1',`A${r}:F${r}`],[11,6,12,16,10,10,10,10,7,7,8,18],9,`A1:L${r}`));
+    areas.push(`$A$1:$L${r}`);
     titles.push(9);
   }
 
@@ -160,7 +171,7 @@ const js=(b:any,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{...H,'
 Deno.serve(async req=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:H});
   const u=new URL(req.url);
-  if(u.searchParams.get('health')==='1')return js({ok:true,service:'attendance-report',version:2});
+  if(u.searchParams.get('health')==='1')return js({ok:true,service:'attendance-report',version:3});
   if(req.method!=='GET')return js({error:'허용되지 않은 요청입니다.'},405);
   try{
     if(!await admin(req))return js({error:'관리자 로그인이 만료되었습니다. 다시 로그인해 주세요.'},401);
