@@ -123,8 +123,8 @@ function importCandidateStep(model) {
   return `<section class="schedule-import-stage"><div class="schedule-import-heading"><span>근무표 선택</span><h3>적용할 범위와 시작일을 확인하세요.</h3></div>
     <div class="schedule-import-candidates">${regionOptions || '<div class="schedule-import-empty">근무표 후보를 찾지 못했습니다.</div>'}</div>
     <div class="schedule-import-fields"><label><span>대상 월</span><input id="scheduleImportMonth" type="month" value="${esc(model.targetMonth)}"></label><label><span>변경 적용 시작일</span><input id="scheduleImportEffective" type="date" min="${esc(minDate)}" max="${esc(importMonthEnd(model.targetMonth))}" value="${esc(effective)}"></label></div>
-    <label class="schedule-import-past-option"><input id="scheduleImportAllowPast" type="checkbox" ${model.allowPast?'checked':''}><span><b>과거 일정까지 일괄 반영</b><small>켜면 대상 월의 지난 날짜도 적용 범위에 포함합니다.</small></span></label>
-    <p class="schedule-import-safety ${model.allowPast?'is-warning':''}">${model.allowPast?'과거 일정 포함 모드입니다. 실제 출퇴근 기록이 있는 날짜는 보호되어 자동 변경되지 않습니다.':'기본값은 오늘 이후만 반영합니다. 실제 출퇴근이 발생한 일정은 자동으로 바꾸지 않습니다.'}</p>
+    <label class="schedule-import-past-option"><input id="scheduleImportAllowPast" type="checkbox" ${model.allowPast?'checked':''}><span><b>과거 일정까지 일괄 반영</b><small>켜면 지난 날짜의 근무표도 Excel 기준으로 덮어씁니다. 실제 출퇴근 기록은 유지됩니다.</small></span></label>
+    <p class="schedule-import-safety ${model.allowPast?'is-warning':''}">${model.allowPast?'과거 근무표 덮어쓰기 모드입니다. 지난 날짜의 근무표는 변경되지만 실제 출퇴근 기록은 삭제·수정하지 않습니다.':'기본값은 오늘 이후만 반영합니다. 실제 출퇴근이 발생한 일정은 자동으로 바꾸지 않습니다.'}</p>
     <button class="action-button primary-action" id="scheduleImportParse"><span>직원 확인으로 계속</span></button></section>`;
 }
 function importEmployeeStep(model) {
