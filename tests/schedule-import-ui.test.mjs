@@ -123,6 +123,36 @@ test('previous-month copy maps by weekday occurrence and preserves existing targ
 });
 
 
+
+test('previous-month copy normalizes overlapping base and extra segments instead of blocking preview', async () => {
+  const {context,source}=await loadUi();
+  context.state.employees=[{id:'e1',name:'고은아',active:true}];
+  context.state.schedules=[];
+  context.state.extraSchedules=[];
+  context.activeEmployees=()=>context.state.employees;
+  const normalized=context.normalizePreviousMonthSegments([
+    {employeeId:'e1',workDate:'2026-10-08',scheduledStart:'07:30',scheduledEnd:'12:00',shiftType:'other',segmentType:'base'},
+    {employeeId:'e1',workDate:'2026-10-08',scheduledStart:'11:00',scheduledEnd:'17:00',shiftType:'other',segmentType:'extra'},
+    {employeeId:'e1',workDate:'2026-10-08',scheduledStart:'17:00',scheduledEnd:'18:00',shiftType:'other',segmentType:'extra'},
+  ]);
+  assert.equal(normalized.mergedOverlapCount,1);
+  assert.deepEqual(JSON.parse(JSON.stringify(normalized.rows.map((row)=>[row.scheduledStart,row.scheduledEnd]))),[
+    ['07:30','17:00'],
+    ['17:00','18:00'],
+  ]);
+  const plan=context.buildPreviousMonthCopyPlan({
+    schedules:[{employeeId:'e1',workDate:'2026-10-08',scheduledStart:'07:30',scheduledEnd:'12:00',shiftType:'other'}],
+    extraSchedules:[
+      {employeeId:'e1',workDate:'2026-10-08',scheduledStart:'11:00',scheduledEnd:'17:00',shiftType:'other'},
+      {employeeId:'e1',workDate:'2026-10-08',scheduledStart:'17:00',scheduledEnd:'18:00',shiftType:'other'},
+    ],
+  },'2026-11',false);
+  assert.equal(plan.normalizedOverlaps,1);
+  assert.equal(plan.shifts.length,2);
+  assert.match(source,/겹치는 근무/);
+  assert.match(source,/하나의 연속 근무구간으로 합쳐/);
+});
+
 test('previous-month preview shows the projected target calendar, not only diff counts', async () => {
   const {source,context}=await loadUi();
   context.state.employees=[
