@@ -29,11 +29,11 @@ test('edge function uses custom app session auth and admin-only guard before act
   assert.ok(authIndex>=0 && actionIndex>authIndex,'admin guard must run before action dispatch');
 });
 
-test('edge exposes Excel preview apply and save_alias actions only',async()=>{
+test('edge exposes Excel and previous-month preview/apply sources without image analysis',async()=>{
   const {edge}=await sources();
   for(const action of ['preview','apply','save_alias']) assert.match(edge,new RegExp(`action\\s*===\\s*['\"]${action}['\"]`));
   assert.doesNotMatch(edge,/analyze_image|analyzeScheduleImage|OPENAI_API_KEY|vision-adapter/);
-  assert.match(edge,/sourceType!=='xlsx'/);
+  assert.match(edge,/\['xlsx','previous_month'\]\.includes\(sourceType\)/);
   assert.match(edge,/buildScheduleImportDiff/);
   assert.match(edge,/summarizeImportDiff/);
   assert.match(edge,/apply_schedule_import/);
