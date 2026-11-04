@@ -200,8 +200,21 @@ renderAdmin=function(){
   communityBaseRenderAdmin();
   document.querySelector('#adminCommunityTab')?.addEventListener('click',()=>setAdminHomeTab('community'));
 };
-const communityBaseCloseInternalViewForBack=closeInternalViewForBack;
-closeInternalViewForBack=function(){
-  if(session?.role==='staff'&&currentTab==='community'){currentTab='today';if(month!==currentMonth())load(currentMonth()).then(renderToday).catch((e)=>toastMsg(e.message));else renderToday();return true;}
-  return communityBaseCloseInternalViewForBack();
-};
+function installCommunityBackHandler(){
+  if(window.__communityBackHandlerInstalled)return true;
+  if(typeof closeInternalViewForBack!=='function')return false;
+  const communityBaseCloseInternalViewForBack=closeInternalViewForBack;
+  closeInternalViewForBack=function(){
+    if(session?.role==='staff'&&currentTab==='community'){
+      currentTab='today';
+      if(month!==currentMonth())load(currentMonth()).then(renderToday).catch((e)=>toastMsg(e.message));
+      else renderToday();
+      return true;
+    }
+    return communityBaseCloseInternalViewForBack();
+  };
+  window.__communityBackHandlerInstalled=true;
+  return true;
+}
+window.__attendanceCommunityLoaded=true;
+window.addEventListener('load',()=>installCommunityBackHandler(),{once:true});
