@@ -408,6 +408,40 @@ function currentTargetScheduleKeys() {
   return keys;
 }
 
+
+function previousMonthTimeMinutes(value) {
+  const parts=String(value||'').slice(0,5).split(':').map(Number);
+  return Number.isFinite(parts[0])&&Number.isFinite(parts[1]) ? parts[0]*60+parts[1] : NaN;
+}
+
+function normalizePreviousMonthSegments(rows=[]) {
+  const sorted=rows
+    .map((row)=>({...row,scheduledStart:String(row.scheduledStart||'').slice(0,5),scheduledEnd:String(row.scheduledEnd||'').slice(0,5)}))
+    .filter((row)=>Number.isFinite(previousMonthTimeMinutes(row.scheduledStart))&&Number.isFinite(previousMonthTimeMinutes(row.scheduledEnd))&&previousMonthTimeMinutes(row.scheduledEnd)>previousMonthTimeMinutes(row.scheduledStart))
+    .sort((a,b)=>previousMonthTimeMinutes(a.scheduledStart)-previousMonthTimeMinutes(b.scheduledStart)||previousMonthTimeMinutes(a.scheduledEnd)-previousMonthTimeMinutes(b.scheduledEnd));
+  const normalized=[];
+  let mergedOverlapCount=0;
+  for(const row of sorted){
+    const last=normalized[normalized.length-1];
+    if(!last){
+      normalized.push({...row});
+      continue;
+    }
+    const lastEnd=previousMonthTimeMinutes(last.scheduledEnd);
+    const start=previousMonthTimeMinutes(row.scheduledStart);
+    const end=previousMonthTimeMinutes(row.scheduledEnd);
+    if(start<lastEnd){
+      mergedOverlapCount++;
+      if(end>lastEnd) last.scheduledEnd=row.scheduledEnd;
+      if(last.shiftType==='other'&&row.shiftType&&row.shiftType!=='other') last.shiftType=row.shiftType;
+      if(last.segmentType!=='base'&&row.segmentType==='base') last.segmentType='base';
+      continue;
+    }
+    normalized.push({...row});
+  }
+  return {rows:normalized,mergedOverlapCount};
+}
+
 function buildPreviousMonthCopyPlan(bundle,targetMonth,overwriteExisting=false) {
   const active=(typeof activeEmployees==='function'?activeEmployees():(state?.employees||[]).filter((row)=>row.active!==false));
   const activeIds=new Set(active.map((row)=>String(row.id)));
@@ -424,7 +458,7 @@ function buildPreviousMonthCopyPlan(bundle,targetMonth,overwriteExisting=false) 
     grouped.get(key).push(row);
   }
   const shifts=[];
-  let skippedExisting=0, skippedOutOfRange=0, skippedInactive=0;
+  let skippedExisting=0, skippedOutOfRange=0, skippedInactive=0, normalizedOverlaps=0;
   for(const rows of grouped.values()) {
     const first=rows[0];
     const employeeId=String(first?.employeeId||'');
@@ -433,7 +467,9 @@ function buildPreviousMonthCopyPlan(bundle,targetMonth,overwriteExisting=false) 
     if(!workDate){skippedOutOfRange++;continue;}
     const targetKey=employeeId+'|'+workDate;
     if(!overwriteExisting&&occupied.has(targetKey)){skippedExisting++;continue;}
-    for(const row of rows.sort((a,b)=>String(a.scheduledStart||'').localeCompare(String(b.scheduledStart||'')))) {
+    const normalized=normalizePreviousMonthSegments(rows);
+    normalizedOverlaps+=normalized.mergedOverlapCount;
+    for(const row of normalized.rows) {
       shifts.push({
         employeeId,
         employeeLabel:names.get(employeeId)||'직원',
@@ -444,7 +480,7 @@ function buildPreviousMonthCopyPlan(bundle,targetMonth,overwriteExisting=false) 
       });
     }
   }
-  return {shifts,sourceGroups:grouped.size,skippedExisting,skippedOutOfRange,skippedInactive};
+  return {shifts,sourceGroups:grouped.size,skippedExisting,skippedOutOfRange,skippedInactive,normalizedOverlaps};
 }
 
 async function previousMonthFingerprint(model) {
@@ -467,6 +503,7 @@ function previousMonthSetupMarkup(model) {
     +'<label class="schedule-import-past-option"><input id="previousMonthOverwrite" type="checkbox" '+(model.overwriteExisting?'checked':'')+'><span><b>이번 달 기존 일정도 덮어쓰기</b><small>기본값은 꺼짐입니다. 꺼두면 이미 만든 직원·날짜 일정은 그대로 유지합니다.</small></span></label>'
     +(model.plan.skippedOutOfRange?'<div class="schedule-import-safety">'+model.plan.skippedOutOfRange+'건은 대상 월에 같은 주차·요일이 없어 제외됩니다.</div>':'')
     +(model.plan.skippedInactive?'<div class="schedule-import-safety">'+model.plan.skippedInactive+'건은 현재 비활성 직원이라 제외됩니다.</div>':'')
+    +(model.plan.normalizedOverlaps?'<div class="schedule-import-safety is-warning"><b>겹치는 근무 '+model.plan.normalizedOverlaps+'건 자동 정리</b><br>지난달 기본/추가근무 시간이 서로 겹친 경우 하나의 연속 근무구간으로 합쳐 미리보기에 반영합니다.</div>':'')
     +'<div class="sheet-notice">예: 지난달 첫 번째 목요일 근무 → 이번 달 첫 번째 목요일 근무. 실제 출퇴근 기록은 변경하지 않습니다.</div>'
     +'<button class="action-button primary-action" id="previousMonthPreview" '+(!model.plan.shifts.length?'disabled':'')+'><span>적용 후 근무표 미리보기</span></button></div>';
 }
