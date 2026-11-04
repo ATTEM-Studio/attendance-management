@@ -98,6 +98,39 @@ test('preview model enforces KST effective date floor and exposes all diff count
   assert.deepEqual(JSON.parse(JSON.stringify(model.summary)),{add:1,update:1,remove:1,protected:1,needs_review:1,unchanged:1});
 });
 
+
+test('previous-month copy maps by weekday occurrence and preserves existing target schedules by default', async () => {
+  const {context}=await loadUi();
+  context.state.employees=[{id:'e1',name:'김나현',active:true}];
+  context.state.schedules=[{employeeId:'e1',workDate:'2026-11-05',scheduledStart:'09:00',scheduledEnd:'18:00',shiftType:'open'}];
+  context.state.extraSchedules=[];
+  context.activeEmployees=()=>context.state.employees;
+  assert.equal(context.previousMonthKey('2026-11'),'2026-10');
+  assert.equal(context.targetDateForOccurrence('2026-11','2026-10-01'),'2026-11-05');
+  assert.equal(context.targetDateForOccurrence('2026-11','2026-10-04'),'2026-11-01');
+  assert.equal(context.targetDateForOccurrence('2026-11','2026-10-29'),'');
+  const bundle={schedules:[
+    {employeeId:'e1',workDate:'2026-10-01',scheduledStart:'09:00',scheduledEnd:'18:00',shiftType:'open'},
+    {employeeId:'e1',workDate:'2026-10-02',scheduledStart:'10:00',scheduledEnd:'17:00',shiftType:'middle'},
+  ],extraSchedules:[]};
+  const safe=context.buildPreviousMonthCopyPlan(bundle,'2026-11',false);
+  assert.equal(safe.skippedExisting,1);
+  assert.equal(safe.shifts.length,1);
+  assert.equal(safe.shifts[0].workDate,'2026-11-06');
+  const overwrite=context.buildPreviousMonthCopyPlan(bundle,'2026-11',true);
+  assert.equal(overwrite.skippedExisting,0);
+  assert.equal(overwrite.shifts.length,2);
+});
+
+test('admin Work exposes previous-month copy next to Excel import', async () => {
+  const {source,context}=await loadUi();
+  assert.match(source,/지난달 불러오기/);
+  assert.equal(typeof context.openPreviousMonthCopy,'function');
+  assert.equal(typeof context.buildPreviousMonthCopyPlan,'function');
+  assert.match(source,/id="adminPreviousMonthCopy"/);
+  assert.match(source,/id="adminScheduleImport"/);
+});
+
 test('schedule import entry is injected into admin Work and build ships local parser assets in order', async () => {
   assert.equal(existsSync(styleUrl), true, 'styles-schedule-import.css must exist');
   execFileSync(process.execPath,['build.mjs'],{stdio:'pipe'});

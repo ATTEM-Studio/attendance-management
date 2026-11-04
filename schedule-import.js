@@ -372,6 +372,217 @@ function bindScheduleImportSheet() {
   if(apply) apply.onclick=async()=>{setPending?.(apply,true,'적용 중');try{const result=await applyScheduleImportChanges();await load(scheduleImportState.targetMonth);renderAdmin();dismissLayer?.(document.querySelector?.('.sheet-backdrop'));toastMsg?.(`근무표를 적용했습니다. ${Number(result?.summary?.add||0)+Number(result?.summary?.update||0)}건 반영`);}catch(error){toastMsg?.(error.message);}finally{if(apply?.isConnected)setPending?.(apply,false);}};
 }
 
+
+let previousMonthCopyState=null;
+
+function previousMonthKey(targetMonth) {
+  const parts=String(targetMonth||'').split('-').map(Number);
+  if(!parts[0]||!parts[1]) return '';
+  const date=new Date(Date.UTC(parts[0],parts[1]-2,1));
+  return date.getUTCFullYear()+'-'+String(date.getUTCMonth()+1).padStart(2,'0');
+}
+
+function monthWeekdayOccurrence(isoDate) {
+  const [y,m,d]=String(isoDate||'').split('-').map(Number);
+  if(!y||!m||!d) return null;
+  const weekday=new Date(Date.UTC(y,m-1,d)).getUTCDay();
+  return {weekday,occurrence:Math.floor((d-1)/7)+1};
+}
+
+function targetDateForOccurrence(targetMonth,sourceDate) {
+  const info=monthWeekdayOccurrence(sourceDate);
+  const parts=String(targetMonth||'').split('-').map(Number);
+  if(!info||!parts[0]||!parts[1]) return '';
+  const firstWeekday=new Date(Date.UTC(parts[0],parts[1]-1,1)).getUTCDay();
+  const first=1+((info.weekday-firstWeekday+7)%7);
+  const day=first+7*(info.occurrence-1);
+  const last=new Date(Date.UTC(parts[0],parts[1],0)).getUTCDate();
+  return day<=last ? targetMonth+'-'+String(day).padStart(2,'0') : '';
+}
+
+function currentTargetScheduleKeys() {
+  const keys=new Set();
+  for(const row of [...(state?.schedules||[]),...(state?.extraSchedules||[])]) {
+    if(row?.employeeId&&row?.workDate) keys.add(row.employeeId+'|'+row.workDate);
+  }
+  return keys;
+}
+
+function buildPreviousMonthCopyPlan(bundle,targetMonth,overwriteExisting=false) {
+  const active=(typeof activeEmployees==='function'?activeEmployees():(state?.employees||[]).filter((row)=>row.active!==false));
+  const activeIds=new Set(active.map((row)=>String(row.id)));
+  const names=new Map(active.map((row)=>[String(row.id),String(row.name||'직원')]));
+  const occupied=currentTargetScheduleKeys();
+  const sourceRows=[
+    ...(bundle?.schedules||[]).map((row)=>({...row,segmentType:'base'})),
+    ...(bundle?.extraSchedules||[]).map((row)=>({...row,segmentType:'extra'})),
+  ];
+  const grouped=new Map();
+  for(const row of sourceRows) {
+    const key=String(row.employeeId||'')+'|'+String(row.workDate||'');
+    if(!grouped.has(key)) grouped.set(key,[]);
+    grouped.get(key).push(row);
+  }
+  const shifts=[];
+  let skippedExisting=0, skippedOutOfRange=0, skippedInactive=0;
+  for(const rows of grouped.values()) {
+    const first=rows[0];
+    const employeeId=String(first?.employeeId||'');
+    if(!activeIds.has(employeeId)){skippedInactive++;continue;}
+    const workDate=targetDateForOccurrence(targetMonth,first.workDate);
+    if(!workDate){skippedOutOfRange++;continue;}
+    const targetKey=employeeId+'|'+workDate;
+    if(!overwriteExisting&&occupied.has(targetKey)){skippedExisting++;continue;}
+    for(const row of rows.sort((a,b)=>String(a.scheduledStart||'').localeCompare(String(b.scheduledStart||'')))) {
+      shifts.push({
+        employeeId,
+        employeeLabel:names.get(employeeId)||'직원',
+        workDate,
+        scheduledStart:String(row.scheduledStart||'').slice(0,5),
+        scheduledEnd:String(row.scheduledEnd||'').slice(0,5),
+        shiftType:row.shiftType||'other',
+      });
+    }
+  }
+  return {shifts,sourceGroups:grouped.size,skippedExisting,skippedOutOfRange,skippedInactive};
+}
+
+async function previousMonthFingerprint(model) {
+  const stable=model.shifts.slice().sort((a,b)=>
+    String(a.workDate).localeCompare(String(b.workDate))||
+    String(a.employeeId).localeCompare(String(b.employeeId))||
+    String(a.scheduledStart).localeCompare(String(b.scheduledStart))
+  );
+  const raw=JSON.stringify({sourceMonth:model.sourceMonth,targetMonth:model.targetMonth,overwriteExisting:model.overwriteExisting,shifts:stable});
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+  return [...new Uint8Array(digest)].map((x)=>x.toString(16).padStart(2,'0')).join('');
+}
+
+function previousMonthSetupMarkup(model) {
+  const sourceTitle=typeof monthTitle==='function'?monthTitle(model.sourceMonth):model.sourceMonth;
+  const targetTitle=typeof monthTitle==='function'?monthTitle(model.targetMonth):model.targetMonth;
+  return '<div class="schedule-import previous-month-copy"><div class="sheet-heading"><div><span class="sheet-kicker">지난달 불러오기</span><h2>'+esc(sourceTitle)+' → '+esc(targetTitle)+'</h2><p>같은 요일·같은 주차 기준으로 근무표를 새 달에 맞춰 복사합니다.</p></div></div>'
+    +'<div class="previous-month-route"><div><span>기준</span><b>'+esc(sourceTitle)+'</b></div><span>→</span><div><span>적용</span><b>'+esc(targetTitle)+'</b></div></div>'
+    +'<div class="previous-month-copy-stats"><div><b>'+model.plan.sourceGroups+'</b><span>지난달 근무일</span></div><div><b>'+model.plan.shifts.length+'</b><span>복사할 구간</span></div><div><b>'+model.plan.skippedExisting+'</b><span>기존 일정 유지</span></div></div>'
+    +'<label class="schedule-import-past-option"><input id="previousMonthOverwrite" type="checkbox" '+(model.overwriteExisting?'checked':'')+'><span><b>이번 달 기존 일정도 덮어쓰기</b><small>기본값은 꺼짐입니다. 꺼두면 이미 만든 직원·날짜 일정은 그대로 유지합니다.</small></span></label>'
+    +(model.plan.skippedOutOfRange?'<div class="schedule-import-safety">'+model.plan.skippedOutOfRange+'건은 대상 월에 같은 주차·요일이 없어 제외됩니다.</div>':'')
+    +(model.plan.skippedInactive?'<div class="schedule-import-safety">'+model.plan.skippedInactive+'건은 현재 비활성 직원이라 제외됩니다.</div>':'')
+    +'<div class="sheet-notice">예: 지난달 첫 번째 목요일 근무 → 이번 달 첫 번째 목요일 근무. 실제 출퇴근 기록은 변경하지 않습니다.</div>'
+    +'<button class="action-button primary-action" id="previousMonthPreview" '+(!model.plan.shifts.length?'disabled':'')+'><span>변경사항 미리보기</span></button></div>';
+}
+
+function previousMonthPreviewMarkup(model) {
+  const preview=model.preview||buildImportPreviewModel({sourceType:'previous_month',targetMonth:model.targetMonth,effectiveDate:model.effectiveDate,allowPast:model.allowPast,diff:[]});
+  const summary=preview.summary||emptyImportSummary();
+  const actionable=summary.add+summary.update+summary.remove;
+  const changes=importPreviewChanges(preview);
+  return '<div class="schedule-import previous-month-copy"><div class="sheet-heading"><div><span class="sheet-kicker">지난달 불러오기</span><h2>변경사항 확인</h2><p>적용 전에 월간 캘린더에서 바뀌는 날짜를 확인하세요.</p></div></div>'
+    +'<div class="schedule-import-summary"><div><b>'+summary.add+'</b><span>신규</span></div><div><b>'+summary.update+'</b><span>변경</span></div><div><b>'+summary.remove+'</b><span>삭제</span></div><div><b>'+summary.protected+'</b><span>보호</span></div><div><b>'+summary.needs_review+'</b><span>확인 필요</span></div></div>'
+    +(changes.length?importPreviewCalendar(preview,model.targetMonth,model.previewSelectedDate):'<div class="schedule-import-empty">변경할 일정이 없습니다.</div>')
+    +'<div id="previousMonthSelectedDetail">'+importSelectedDateDetail(preview,model.previewSelectedDate)+'</div>'
+    +'<div class="schedule-import-apply-bar"><span>'+(actionable?'적용 예정 '+actionable+'건':'적용할 변경 없음')+'</span><button class="action-button primary-action" id="previousMonthApply" '+(!actionable||summary.needs_review?'disabled':'')+'><span>지난달 근무표 적용</span></button></div></div>';
+}
+
+function reopenPreviousMonthCopy() {
+  dismissLayer?.(document.querySelector?.('.sheet-backdrop'));
+  setTimeout(()=>openPreviousMonthCopySheet(),80);
+}
+
+function openPreviousMonthCopySheet() {
+  if(!previousMonthCopyState) return;
+  openSheet(previousMonthCopyState.preview?previousMonthPreviewMarkup(previousMonthCopyState):previousMonthSetupMarkup(previousMonthCopyState),{size:'schedule-import-sheet'});
+  bindPreviousMonthCopySheet();
+}
+
+function rebuildPreviousMonthCopyPlan(overwriteExisting) {
+  previousMonthCopyState.overwriteExisting=overwriteExisting===true;
+  previousMonthCopyState.plan=buildPreviousMonthCopyPlan(previousMonthCopyState.bundle,previousMonthCopyState.targetMonth,previousMonthCopyState.overwriteExisting);
+  previousMonthCopyState.shifts=previousMonthCopyState.plan.shifts;
+  previousMonthCopyState.preview=null;
+  previousMonthCopyState.runId='';
+  previousMonthCopyState.previewSelectedDate='';
+}
+
+async function openPreviousMonthCopy() {
+  if(session?.role!=='admin') return toastMsg?.('관리자만 지난달 근무표를 불러올 수 있습니다.');
+  const targetMonth=scheduleImportMonth();
+  const sourceMonth=previousMonthKey(targetMonth);
+  openSheet('<div class="schedule-import"><div class="sheet-heading"><div><span class="sheet-kicker">지난달 불러오기</span><h2>근무표를 불러오는 중이에요</h2><p>'+esc(sourceMonth)+' 근무표와 추가 근무를 확인하고 있습니다.</p></div></div><div class="schedule-import-empty">잠시 후 미리보기 설정이 열립니다.</div></div>',{size:'schedule-import-sheet'});
+  try{
+    const [source,extra]=await Promise.all([
+      api.bootstrap(session.token,sourceMonth),
+      typeof api.listExtraSchedules==='function'?api.listExtraSchedules(session.token,sourceMonth):Promise.resolve({extraSchedules:[]}),
+    ]);
+    const bundle={schedules:source?.schedules||[],extraSchedules:extra?.extraSchedules||[]};
+    previousMonthCopyState={
+      sourceMonth,targetMonth,bundle,overwriteExisting:false,plan:null,shifts:[],
+      sourceFingerprint:'',runId:'',preview:null,previewSelectedDate:'',
+      allowPast:importMonthStart(targetMonth)<scheduleImportToday(),
+      effectiveDate:importMonthStart(targetMonth),
+      authoritative:false,
+    };
+    rebuildPreviousMonthCopyPlan(false);
+    reopenPreviousMonthCopy();
+  }catch(error){
+    dismissLayer?.(document.querySelector?.('.sheet-backdrop'));
+    toastMsg?.(error.message||'지난달 근무표를 불러오지 못했습니다.');
+  }
+}
+
+async function requestPreviousMonthPreview() {
+  const model=previousMonthCopyState;
+  model.sourceFingerprint=await previousMonthFingerprint(model);
+  const result=await api.previewScheduleImport(session.token,{
+    sourceType:'previous_month',
+    sourceName:model.sourceMonth+' 지난달 근무표',
+    sourceFingerprint:model.sourceFingerprint,
+    targetMonth:model.targetMonth,
+    effectiveDate:model.effectiveDate,
+    allowPast:model.allowPast,
+    authoritative:false,
+    shifts:model.shifts,
+  });
+  model.preview=buildImportPreviewModel({...result,sourceType:'previous_month',targetMonth:model.targetMonth,effectiveDate:model.effectiveDate,allowPast:model.allowPast,authoritative:false,diff:result?.diff||[]});
+  model.runId=result?.runId||'';
+  model.previewSelectedDate='';
+}
+
+async function applyPreviousMonthCopy() {
+  const model=previousMonthCopyState;
+  return api.applyScheduleImport(session.token,{
+    runId:model.runId,
+    sourceType:'previous_month',
+    sourceName:model.sourceMonth+' 지난달 근무표',
+    sourceFingerprint:model.sourceFingerprint,
+    targetMonth:model.targetMonth,
+    effectiveDate:model.effectiveDate,
+    allowPast:model.allowPast,
+    authoritative:false,
+    shifts:model.shifts,
+  });
+}
+
+function bindPreviousMonthCopySheet() {
+  const overwrite=document.querySelector?.('#previousMonthOverwrite');
+  if(overwrite) overwrite.onchange=()=>{rebuildPreviousMonthCopyPlan(overwrite.checked);reopenPreviousMonthCopy();};
+  const preview=document.querySelector?.('#previousMonthPreview');
+  if(preview) preview.onclick=async()=>{setPending?.(preview,true,'비교 중');try{await requestPreviousMonthPreview();reopenPreviousMonthCopy();}catch(error){toastMsg?.(error.message);}finally{if(preview?.isConnected)setPending?.(preview,false);}};
+  document.querySelectorAll?.('[data-import-preview-date]').forEach((button)=>{button.onclick=()=>{
+    previousMonthCopyState.previewSelectedDate=button.dataset.importPreviewDate||'';
+    document.querySelectorAll?.('[data-import-preview-date]').forEach((cell)=>cell.classList?.toggle('is-selected',cell.dataset.importPreviewDate===previousMonthCopyState.previewSelectedDate));
+    const detail=document.querySelector?.('#previousMonthSelectedDetail');
+    if(detail) detail.innerHTML=importSelectedDateDetail(previousMonthCopyState.preview,previousMonthCopyState.previewSelectedDate);
+  };});
+  const apply=document.querySelector?.('#previousMonthApply');
+  if(apply) apply.onclick=async()=>{setPending?.(apply,true,'적용 중');try{
+    const result=await applyPreviousMonthCopy();
+    await load(previousMonthCopyState.targetMonth);
+    dismissLayer?.(document.querySelector?.('.sheet-backdrop'));
+    renderAdmin?.();
+    toastMsg?.('지난달 근무표를 '+(Number(result?.summary?.add||0)+Number(result?.summary?.update||0))+'건 반영했습니다.');
+  }catch(error){toastMsg?.(error.message);}finally{if(apply?.isConnected)setPending?.(apply,false);}};
+}
+
 function openScheduleImport(existingState=null) {
   if (session?.role !== 'admin') return typeof toastMsg==='function' ? toastMsg('관리자만 근무표를 가져올 수 있습니다.') : undefined;
   scheduleImportState=existingState || defaultScheduleImportState();
@@ -384,7 +595,7 @@ if (typeof adminScheduleWorkspace === 'function') {
   adminScheduleWorkspace=function adminScheduleWorkspaceWithImport() {
     const html=baseAdminScheduleWorkspaceForImport();
     if (html.includes('id="adminScheduleImport"')) return html;
-    return html.replace('<div class="admin-work-actions">','<div class="admin-work-actions"><button class="admin-secondary-cta schedule-import-entry" id="adminScheduleImport"><span>근무표 가져오기</span></button>');
+    return html.replace('<div class="admin-work-actions">','<div class="admin-work-actions"><button class="admin-secondary-cta previous-month-entry" id="adminPreviousMonthCopy"><span>지난달 불러오기</span></button><button class="admin-secondary-cta schedule-import-entry" id="adminScheduleImport"><span>근무표 가져오기</span></button>');
   };
 }
 
@@ -392,6 +603,7 @@ if (typeof bindAdminWork === 'function') {
   const baseBindAdminWorkForImport=bindAdminWork;
   bindAdminWork=function bindAdminWorkWithImport() {
     baseBindAdminWorkForImport();
+    document.querySelector?.('#adminPreviousMonthCopy')?.addEventListener('click',()=>openPreviousMonthCopy());
     document.querySelector?.('#adminScheduleImport')?.addEventListener('click',()=>openScheduleImport());
   };
 }

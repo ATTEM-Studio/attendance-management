@@ -46,7 +46,7 @@ async function requireAdmin(req:Request){
 
 function normalizeSource(body:any){
   const sourceType=text(body?.sourceType);
-  if(sourceType!=='xlsx') throw new Error('Excel .xlsx 근무표만 가져올 수 있습니다.');
+  if(!['xlsx','previous_month'].includes(sourceType)) throw new Error('지원하지 않는 근무표 원본입니다.');
   const targetMonth=text(body?.targetMonth);
   const effectiveDate=text(body?.effectiveDate);
   const allowPast=body?.allowPast===true;
