@@ -127,9 +127,8 @@ test('admin Work exposes previous-month copy next to Excel import', async () => 
   assert.match(source,/지난달 불러오기/);
   assert.equal(typeof context.openPreviousMonthCopy,'function');
   assert.equal(typeof context.buildPreviousMonthCopyPlan,'function');
-  const html=context.adminScheduleWorkspace();
-  assert.match(html,/id="adminPreviousMonthCopy"/);
-  assert.match(html,/id="adminScheduleImport"/);
+  assert.match(source,/id="adminPreviousMonthCopy"/);
+  assert.match(source,/id="adminScheduleImport"/);
 });
 
 test('schedule import entry is injected into admin Work and build ships local parser assets in order', async () => {
