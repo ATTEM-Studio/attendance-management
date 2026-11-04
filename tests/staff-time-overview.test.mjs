@@ -102,5 +102,5 @@ test('employee manager adds a direct staff-page preview action',()=>{
 test('build ships the staff time overview assets with a fresh PWA cache',()=>{
   assert.match(build,/staff-time-overview\.js/);
   assert.match(build,/styles-staff-time-overview\.css/);
-  assert.match(build,/attendance-management-v28-hardening-v4/);
+  assert.match(build,/attendance-management-v28-hardening-v5/);
 });
