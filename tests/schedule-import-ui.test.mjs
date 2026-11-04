@@ -122,6 +122,48 @@ test('previous-month copy maps by weekday occurrence and preserves existing targ
   assert.equal(overwrite.shifts.length,2);
 });
 
+
+test('previous-month preview shows the projected target calendar, not only diff counts', async () => {
+  const {source,context}=await loadUi();
+  context.state.employees=[
+    {id:'e1',name:'김나현',active:true},
+    {id:'e2',name:'장세영',active:true},
+  ];
+  context.activeEmployees=()=>context.state.employees;
+  context.state.schedules=[
+    {employeeId:'e2',workDate:'2026-11-05',scheduledStart:'08:00',scheduledEnd:'14:00',shiftType:'open'},
+  ];
+  context.state.extraSchedules=[];
+  const model={
+    targetMonth:'2026-11',
+    previewSelectedDate:'',
+    preview:context.buildImportPreviewModel({
+      sourceType:'previous_month',
+      targetMonth:'2026-11',
+      effectiveDate:'2026-11-01',
+      today:'2026-11-01',
+      diff:[
+        {status:'add',employeeId:'e1',employeeName:'김나현',workDate:'2026-11-05',before:[],after:[{scheduledStart:'13:00',scheduledEnd:'19:00',shiftType:'middle'}]},
+      ],
+    }),
+  };
+  const rows=context.previousMonthProjectedRows(model);
+  assert.equal(rows.length,2);
+  assert.ok(rows.some((row)=>row.employeeName==='김나현'&&row.previewStatus==='add'));
+  assert.ok(rows.some((row)=>row.employeeName==='장세영'&&row.previewStatus==='existing'));
+  const calendar=context.previousMonthProjectionCalendar(model);
+  assert.match(calendar,/적용 후 예상 결과/);
+  assert.match(calendar,/2026년 11월 근무표/);
+  assert.match(calendar,/지난달 반영/);
+  assert.match(calendar,/기존 유지/);
+  const html=context.previousMonthPreviewMarkup(model);
+  assert.match(html,/적용 전 미리보기/);
+  assert.match(html,/아직 실제 일정에는 저장되지 않았습니다/);
+  assert.match(html,/이 근무표로 적용/);
+  assert.match(source,/적용 후 근무표 미리보기/);
+  assert.match(source,/설정으로 돌아가기/);
+});
+
 test('admin Work exposes previous-month copy next to Excel import', async () => {
   const {source,context}=await loadUi();
   assert.match(source,/지난달 불러오기/);
