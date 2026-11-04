@@ -468,19 +468,119 @@ function previousMonthSetupMarkup(model) {
     +(model.plan.skippedOutOfRange?'<div class="schedule-import-safety">'+model.plan.skippedOutOfRange+'건은 대상 월에 같은 주차·요일이 없어 제외됩니다.</div>':'')
     +(model.plan.skippedInactive?'<div class="schedule-import-safety">'+model.plan.skippedInactive+'건은 현재 비활성 직원이라 제외됩니다.</div>':'')
     +'<div class="sheet-notice">예: 지난달 첫 번째 목요일 근무 → 이번 달 첫 번째 목요일 근무. 실제 출퇴근 기록은 변경하지 않습니다.</div>'
-    +'<button class="action-button primary-action" id="previousMonthPreview" '+(!model.plan.shifts.length?'disabled':'')+'><span>변경사항 미리보기</span></button></div>';
+    +'<button class="action-button primary-action" id="previousMonthPreview" '+(!model.plan.shifts.length?'disabled':'')+'><span>적용 후 근무표 미리보기</span></button></div>';
+}
+
+
+function previousMonthProjectedRows(model) {
+  const targetMonth=String(model?.targetMonth||'');
+  const employees=(typeof activeEmployees==='function'?activeEmployees():(state?.employees||[]).filter((row)=>row.active!==false));
+  const names=new Map(employees.map((row)=>[String(row.id),String(row.name||'직원')]));
+  const groups=new Map();
+  const existing=[
+    ...(state?.schedules||[]).map((row)=>({...row,segmentType:'base'})),
+    ...(state?.extraSchedules||[]).map((row)=>({...row,segmentType:'extra'})),
+  ].filter((row)=>String(row.workDate||'').startsWith(targetMonth+'-'));
+  for(const row of existing){
+    const key=String(row.employeeId||'')+'|'+String(row.workDate||'');
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push({
+      employeeId:String(row.employeeId||''),
+      employeeName:names.get(String(row.employeeId||''))||'직원',
+      workDate:String(row.workDate||''),
+      scheduledStart:String(row.scheduledStart||'').slice(0,5),
+      scheduledEnd:String(row.scheduledEnd||'').slice(0,5),
+      shiftType:row.shiftType||'other',
+      previewStatus:'existing',
+    });
+  }
+  for(const change of model?.preview?.diff||[]){
+    const employeeId=String(change?.employeeId||'');
+    const workDate=String(change?.workDate||'');
+    if(!employeeId||!workDate.startsWith(targetMonth+'-')) continue;
+    const key=employeeId+'|'+workDate;
+    if(change.status==='remove'){
+      groups.delete(key);
+      continue;
+    }
+    if(!['add','update'].includes(change.status)) continue;
+    const after=Array.isArray(change.after)?change.after:[];
+    groups.set(key,after.map((row)=>({
+      employeeId,
+      employeeName:change.employeeName||change.employeeLabel||names.get(employeeId)||'직원',
+      workDate,
+      scheduledStart:String(row.scheduledStart||'').slice(0,5),
+      scheduledEnd:String(row.scheduledEnd||'').slice(0,5),
+      shiftType:row.shiftType||'other',
+      previewStatus:change.status,
+    })));
+  }
+  return [...groups.values()].flat().sort((a,b)=>
+    a.workDate.localeCompare(b.workDate)||
+    a.scheduledStart.localeCompare(b.scheduledStart)||
+    a.employeeName.localeCompare(b.employeeName)
+  );
+}
+
+function previousMonthProjectionByDate(model) {
+  const grouped=new Map();
+  for(const row of previousMonthProjectedRows(model)){
+    if(!grouped.has(row.workDate)) grouped.set(row.workDate,[]);
+    grouped.get(row.workDate).push(row);
+  }
+  return grouped;
+}
+
+function previousMonthProjectionMini(rows) {
+  return rows.slice(0,3).map((row)=>{
+    const badge=row.previewStatus==='add'?'복사':row.previewStatus==='update'?'변경':'기존';
+    return '<span class="previous-month-projection-mini is-'+esc(row.previewStatus)+'"><b>'+esc(row.employeeName)+'</b><small>'+esc(row.scheduledStart+'–'+row.scheduledEnd)+'</small><em>'+badge+'</em></span>';
+  }).join('');
+}
+
+function previousMonthProjectionCalendar(model) {
+  const grouped=previousMonthProjectionByDate(model);
+  const meta=importCalendarMonthMeta(model.targetMonth);
+  if(!meta.days) return '<div class="schedule-import-empty">적용 후 달력을 표시할 수 없습니다.</div>';
+  const weekday=['일','월','화','수','목','금','토'].map((day)=>'<span>'+day+'</span>').join('');
+  const cells=[];
+  for(let blank=0;blank<meta.firstWeekday;blank++) cells.push('<span class="previous-month-projection-day is-blank" aria-hidden="true"></span>');
+  for(let day=1;day<=meta.days;day++){
+    const date=meta.year+'-'+String(meta.month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    const rows=grouped.get(date)||[];
+    const changed=rows.filter((row)=>row.previewStatus!=='existing').length;
+    const selected=date===model.previewSelectedDate;
+    const classes=['previous-month-projection-day',rows.length?'has-schedule':'is-empty',changed?'has-imported':'',selected?'is-selected':''].filter(Boolean).join(' ');
+    const imported=changed?'<span class="previous-month-projection-count">'+changed+'건 반영</span>':'';
+    const mini=rows.length?'<span class="previous-month-projection-list">'+previousMonthProjectionMini(rows)+(rows.length>3?'<small class="previous-month-projection-more">+'+(rows.length-3)+'</small>':'')+'</span>':'';
+    cells.push('<button type="button" class="'+classes+'" data-previous-projection-date="'+date+'" '+(rows.length?'':'disabled')+'><span class="previous-month-projection-date">'+day+'</span>'+imported+mini+'</button>');
+  }
+  return '<div class="previous-month-projection"><div class="previous-month-projection-heading"><div><span>적용 후 예상 결과</span><h3>'+meta.year+'년 '+meta.month+'월 근무표</h3></div><div class="previous-month-projection-legend"><span class="is-imported">지난달 반영</span><span class="is-existing">기존 유지</span></div></div><div class="schedule-import-calendar-weekdays">'+weekday+'</div><div class="previous-month-projection-calendar">'+cells.join('')+'</div></div>';
+}
+
+function previousMonthProjectionDetail(model,selectedDate) {
+  const rows=previousMonthProjectionByDate(model).get(selectedDate)||[];
+  if(!selectedDate||!rows.length) return '<div class="schedule-import-calendar-hint">달력의 근무 날짜를 누르면 적용 후 직원·시간을 확인할 수 있습니다.</div>';
+  return '<div class="previous-month-projection-detail"><div class="schedule-import-selected-heading"><b>'+esc(selectedDate)+' 적용 후</b><span>'+rows.length+'개 근무</span></div><div class="previous-month-projection-detail-list">'+rows.map((row)=>{
+    const badge=row.previewStatus==='add'?'지난달에서 복사':row.previewStatus==='update'?'기존 일정 변경':'기존 일정 유지';
+    return '<div class="previous-month-projection-detail-row is-'+esc(row.previewStatus)+'"><span><b>'+esc(row.employeeName)+'</b><small>'+esc(row.scheduledStart+'–'+row.scheduledEnd)+' · '+esc(row.shiftType||'other')+'</small></span><em>'+badge+'</em></div>';
+  }).join('')+'</div></div>';
 }
 
 function previousMonthPreviewMarkup(model) {
   const preview=model.preview||buildImportPreviewModel({sourceType:'previous_month',targetMonth:model.targetMonth,effectiveDate:model.effectiveDate,allowPast:model.allowPast,diff:[]});
   const summary=preview.summary||emptyImportSummary();
   const actionable=summary.add+summary.update+summary.remove;
-  const changes=importPreviewChanges(preview);
-  return '<div class="schedule-import previous-month-copy"><div class="sheet-heading"><div><span class="sheet-kicker">지난달 불러오기</span><h2>변경사항 확인</h2><p>적용 전에 월간 캘린더에서 바뀌는 날짜를 확인하세요.</p></div></div>'
-    +'<div class="schedule-import-summary"><div><b>'+summary.add+'</b><span>신규</span></div><div><b>'+summary.update+'</b><span>변경</span></div><div><b>'+summary.remove+'</b><span>삭제</span></div><div><b>'+summary.protected+'</b><span>보호</span></div><div><b>'+summary.needs_review+'</b><span>확인 필요</span></div></div>'
-    +(changes.length?importPreviewCalendar(preview,model.targetMonth,model.previewSelectedDate):'<div class="schedule-import-empty">변경할 일정이 없습니다.</div>')
-    +'<div id="previousMonthSelectedDetail">'+importSelectedDateDetail(preview,model.previewSelectedDate)+'</div>'
-    +'<div class="schedule-import-apply-bar"><span>'+(actionable?'적용 예정 '+actionable+'건':'적용할 변경 없음')+'</span><button class="action-button primary-action" id="previousMonthApply" '+(!actionable||summary.needs_review?'disabled':'')+'><span>지난달 근무표 적용</span></button></div></div>';
+  const targetTitle=typeof monthTitle==='function'?monthTitle(model.targetMonth):model.targetMonth;
+  const projected=previousMonthProjectedRows(model);
+  const changedDates=[...new Set((preview.diff||[]).filter((row)=>['add','update','remove'].includes(row.status)).map((row)=>row.workDate).filter(Boolean))].sort();
+  if(!model.previewSelectedDate) model.previewSelectedDate=changedDates[0]||projected[0]?.workDate||'';
+  return '<div class="schedule-import previous-month-copy"><div class="sheet-heading previous-month-preview-heading"><div><span class="sheet-kicker">적용 전 미리보기</span><h2>적용 후 '+esc(targetTitle)+' 근무표</h2><p>아래 달력은 <b>지금 적용 버튼을 눌렀을 때 만들어질 예상 근무표</b>입니다. 아직 실제 일정에는 저장되지 않았습니다.</p></div></div>'
+    +'<div class="previous-month-preview-banner"><b>미리보기 화면</b><span>파란 표시 = 지난달에서 새로 반영 · 회색 표시 = 이번 달 기존 일정 유지</span></div>'
+    +'<div class="schedule-import-summary"><div><b>'+summary.add+'</b><span>새로 복사</span></div><div><b>'+summary.update+'</b><span>기존 변경</span></div><div><b>'+projected.length+'</b><span>적용 후 구간</span></div><div><b>'+summary.protected+'</b><span>보호</span></div><div><b>'+summary.needs_review+'</b><span>확인 필요</span></div></div>'
+    +previousMonthProjectionCalendar(model)
+    +'<div id="previousMonthSelectedDetail">'+previousMonthProjectionDetail(model,model.previewSelectedDate)+'</div>'
+    +'<div class="previous-month-preview-actions"><button class="action-button secondary-action" id="previousMonthBack"><span>설정으로 돌아가기</span></button><div class="schedule-import-apply-bar"><span>'+(actionable?'실제 반영 예정 '+actionable+'건':'적용할 변경 없음')+'</span><button class="action-button primary-action" id="previousMonthApply" '+(!actionable||summary.needs_review?'disabled':'')+'><span>이 근무표로 적용</span></button></div></div></div>';
 }
 
 function reopenPreviousMonthCopy() {
@@ -567,12 +667,14 @@ function bindPreviousMonthCopySheet() {
   if(overwrite) overwrite.onchange=()=>{rebuildPreviousMonthCopyPlan(overwrite.checked);reopenPreviousMonthCopy();};
   const preview=document.querySelector?.('#previousMonthPreview');
   if(preview) preview.onclick=async()=>{setPending?.(preview,true,'비교 중');try{await requestPreviousMonthPreview();reopenPreviousMonthCopy();}catch(error){toastMsg?.(error.message);}finally{if(preview?.isConnected)setPending?.(preview,false);}};
-  document.querySelectorAll?.('[data-import-preview-date]').forEach((button)=>{button.onclick=()=>{
-    previousMonthCopyState.previewSelectedDate=button.dataset.importPreviewDate||'';
-    document.querySelectorAll?.('[data-import-preview-date]').forEach((cell)=>cell.classList?.toggle('is-selected',cell.dataset.importPreviewDate===previousMonthCopyState.previewSelectedDate));
+  document.querySelectorAll?.('[data-previous-projection-date]').forEach((button)=>{button.onclick=()=>{
+    previousMonthCopyState.previewSelectedDate=button.dataset.previousProjectionDate||'';
+    document.querySelectorAll?.('[data-previous-projection-date]').forEach((cell)=>cell.classList?.toggle('is-selected',cell.dataset.previousProjectionDate===previousMonthCopyState.previewSelectedDate));
     const detail=document.querySelector?.('#previousMonthSelectedDetail');
-    if(detail) detail.innerHTML=importSelectedDateDetail(previousMonthCopyState.preview,previousMonthCopyState.previewSelectedDate);
+    if(detail) detail.innerHTML=previousMonthProjectionDetail(previousMonthCopyState,previousMonthCopyState.previewSelectedDate);
   };});
+  const back=document.querySelector?.('#previousMonthBack');
+  if(back) back.onclick=()=>{previousMonthCopyState.preview=null;previousMonthCopyState.runId='';previousMonthCopyState.previewSelectedDate='';reopenPreviousMonthCopy();};
   const apply=document.querySelector?.('#previousMonthApply');
   if(apply) apply.onclick=async()=>{setPending?.(apply,true,'적용 중');try{
     const result=await applyPreviousMonthCopy();
