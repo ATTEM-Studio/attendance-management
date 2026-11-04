@@ -62,5 +62,5 @@ test('community tables are RLS protected and not directly granted to browser rol
 test('build ships community assets with a new PWA cache',()=>{
   assert.match(build,/community\.js/);
   assert.match(build,/styles-community\.css/);
-  assert.match(build,/attendance-management-v28-hardening-v4/);
+  assert.match(build,/attendance-management-v28-hardening-v5/);
 });
